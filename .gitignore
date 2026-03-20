@@ -1,0 +1,53 @@
+# 유니티 임시 폴더 및 빌드 파일 무시
+/[Ll]ibrary/
+/[Tt]emp/
+/[Oo]bj/
+/[Bb]uild/
+/[Bb]uilds/
+/[Ll]ogs/
+/[Uu]ser[Ss]ettings/
+
+# 메모리 캡처 파일 (용량이 큼)
+/[Mm]emoryCaptures/
+
+# 녹화 파일
+/[Rr]ecordings/
+
+# 에디터 및 캐시 폴더
+.vs/
+.gradle/
+ExportedObj/
+.consulo/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# 유니티 생성 메타 파일들
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# 크래시 리포트
+sysinfo.txt
+crashlytics-build.properties
+
+# 안드로이드 빌드 파일 무시 (apk, aab 등)
+*.apk
+*.aab
+*.unitypackage
+*.app
+
+# 임시 생성되는 스트리밍 에셋
+/[Aa]ssets/[Ss]treamingAssets/aa.meta
+/[Aa]ssets/[Ss]treamingAssets/aa/*
