@@ -41,15 +41,130 @@ namespace BossRaid.UI
         private Supabase.Realtime.RealtimeChannel _lobbyChannel;
         private bool _isProcessing = false;
 
+        private void Awake()
+        {
+            EnsureEventSystemIsActive();
+            AutoAssignUIComponents();
+        }
+
+        private void AutoAssignUIComponents()
+        {
+            var canvas = UnityEngine.Object.FindFirstObjectByType<Canvas>();
+            if (canvas == null) return;
+
+            // 1. 게임 생성 (ActiveOps) 버튼 자동 찾기
+            if (activeOpsPanelButton == null)
+            {
+                Button[] buttons = canvas.GetComponentsInChildren<Button>(true);
+                foreach (var b in buttons)
+                {
+                    if (b.name.Contains("ActiveOps") || b.name.Contains("CreateGame") || b.name == "Sliced_ActiveOpsBtn")
+                    {
+                        activeOpsPanelButton = b;
+                        Debug.Log($"[Lobby] 자동 할당 완료: activeOpsPanelButton -> {b.name}");
+                        break;
+                    }
+                }
+            }
+
+            // 2. 전송 (Send) 버튼 자동 찾기
+            if (sendButton == null)
+            {
+                Button[] buttons = canvas.GetComponentsInChildren<Button>(true);
+                foreach (var b in buttons)
+                {
+                    if (b.name.Contains("SendBtn") || b.name == "Sliced_SendBtn")
+                    {
+                        sendButton = b;
+                        Debug.Log($"[Lobby] 자동 할당 완료: sendButton -> {b.name}");
+                        break;
+                    }
+                }
+            }
+
+            // 3. 채팅 입력칸 (Chat Input) 자동 찾기
+            if (chatInput == null)
+            {
+                TMP_InputField[] inputs = canvas.GetComponentsInChildren<TMP_InputField>(true);
+                foreach (var input in inputs)
+                {
+                    string lName = input.name.ToLower();
+                    // 방 제목 입력칸(room 등)이 아닌 필드를 채팅용으로 우선 할당
+                    if (lName.Contains("chat") || lName.Contains("msg") || lName.Contains("input"))
+                    {
+                        if (roomTitleInput != null && input == roomTitleInput) continue;
+                        chatInput = input;
+                        Debug.Log($"[Lobby] 자동 할당 완료: chatInput -> {input.name}");
+                        break;
+                    }
+                }
+                // 이름으로 못 찾았다면 첫 번째 항목을 무조건 할당
+                if (chatInput == null && inputs.Length > 0)
+                {
+                    chatInput = inputs[inputs.Length - 1]; // 보통 계층구조 하단에 위치
+                    Debug.Log($"[Lobby] 자동 할당 (fallback): chatInput -> {chatInput.name}");
+                }
+            }
+        }
+
+        private void EnsureEventSystemIsActive()
+        {
+            var eventSystem = UnityEngine.Object.FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>();
+            if (eventSystem == null)
+            {
+                Debug.LogWarning("[Lobby] EventSystem이 없어 새로 생성합니다.");
+                var go = new GameObject("EventSystem", typeof(UnityEngine.EventSystems.EventSystem));
+                var newModule = go.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                newModule.AssignDefaultActions();
+                eventSystem = go.GetComponent<UnityEngine.EventSystems.EventSystem>();
+            }
+            else
+            {
+                // 이전 StandaloneInputModule이 막고 있는지 확인 후 제거
+                var oldModule = eventSystem.GetComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+                if (oldModule != null)
+                {
+                    Debug.LogWarning("[Lobby] 구형 StandaloneInputModule 충돌 감지! 제거 후 New Input 모듈로 교체합니다.");
+                    Destroy(oldModule);
+                }
+                
+                // 새로운 모듈이 없다면 강제 추가
+                var newModule = eventSystem.GetComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                if (newModule == null)
+                {
+                    Debug.LogWarning("[Lobby] InputSystemUIInputModule이 없어 새로 부착합니다.");
+                    newModule = eventSystem.gameObject.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                }
+                
+                // [필수] 마우스 클릭, 터치 등 기본 액션 할당 (클릭 안 먹히는 문제의 주 원인)
+                newModule.AssignDefaultActions();
+            }
+        }
+
         private void Start()
         {
             Debug.Log("[Lobby] Start called.");
             InitializeProfile();
             InitializeRealtime();
             
-            refreshButton.onClick.AddListener(OnRefreshClicked);
+            // ===== UI 연결 상태 체크 및 강력한 안내 로깅 =====
+            if (activeOpsPanelButton == null && confirmCreateRoomButton == null)
+            {
+                Debug.LogError("<color=red>[Lobby] 🚨 '게임 생성(CREATE GAME)' 버튼이 인스펙터(Inspector)에 연결되지 않았습니다! LobbyUIController 컴포넌트의 Active Ops Panel Button 슬롯에 버튼을 드래그해주세요.</color>");
+            }
+            
+            if (chatInput == null || sendButton == null)
+            {
+                Debug.LogError("<color=red>[Lobby] 🚨 '채팅 작성 칸' 또는 '전송' 버튼이 인스펙터에 연결되지 않았습니다! LobbyUIController 컴포넌트의 Chat Input과 Send Button 슬롯에 각각 연결해주세요.</color>");
+            }
+            // ===============================================
+
             if (chatInput != null) chatInput.onEndEdit.AddListener(OnChatSubmitted);
             if (sendButton != null) sendButton.onClick.AddListener(() => OnChatSubmitted(chatInput.text));
+
+            if (confirmCreateRoomButton != null) confirmCreateRoomButton.onClick.AddListener(OnConfirmCreateRoomClicked);
+            if (openCreateRoomPanelButton != null) openCreateRoomPanelButton.onClick.AddListener(OnActiveOpsPanelClicked);
+            if (refreshButton != null) refreshButton.onClick.AddListener(LoadRoomList);
 
             if (activeOpsPanelButton != null) {
                 Debug.Log("[Lobby] Adding listener to activeOpsPanelButton.");
@@ -57,14 +172,13 @@ namespace BossRaid.UI
                 if (activeOpsTitleText != null) activeOpsTitleText.text = "CREATE GAME";
             }
             else {
-                Debug.LogError("[Lobby] activeOpsPanelButton is NULL in Start!");
+                Debug.LogWarning("[Lobby] activeOpsPanelButton is NULL in Start! (Optional)");
             }
             
             if (createRoomPanel != null) createRoomPanel.SetActive(false);
             
-            // 초기 데이터 로드
             UpdatePlayerList();
-            OnRefreshClicked();
+            LoadRoomList();
         }
 
         private async void InitializeRealtime()
@@ -196,7 +310,7 @@ namespace BossRaid.UI
                 txt.alignment = TextAlignmentOptions.Left;
                 txt.verticalAlignment = VerticalAlignmentOptions.Middle;
                 txt.color = Color.cyan;
-                txt.enableWordWrapping = false; // 한 줄로 표시
+                txt.textWrappingMode = TextWrappingModes.NoWrap; // enableWordWrapping 대신 사용
                 txt.overflowMode = TextOverflowModes.Ellipsis; // 넘치면 ... 표시
                 
                 // [추가] 레이아웃 강제 업데이트 (스크롤뷰 내에서 안 보일 수 있음)
@@ -227,7 +341,7 @@ namespace BossRaid.UI
             }
         }
 
-        private async void OnRefreshClicked()
+        private async void LoadRoomList()
         {
             if (_isProcessing) return;
             if (roomListContainer == null || LobbyManager.Instance == null)
@@ -337,10 +451,29 @@ namespace BossRaid.UI
             }
         }
 
-        private void OnJoinRoomClicked(RoomData room)
+        private async void OnJoinRoomClicked(RoomData room)
         {
+            if (_isProcessing) return;
+            _isProcessing = true;
+
             Debug.Log($"[Lobby] Joining room: {room.title}");
-            // 멀티플레이어 연동 로직 (Photon 등)
+            
+            bool success = await LobbyManager.Instance.JoinRoom(room);
+            if (success)
+            {
+                if (WaitingRoomManager.Instance != null)
+                {
+                    await WaitingRoomManager.Instance.JoinRoom(room.id);
+                }
+                UnityEngine.SceneManagement.SceneManager.LoadScene("WaitingRoomScene");
+            }
+            else
+            {
+                // 실패 메시지 표시 (예: 차단됨, 인원 초과 등)
+                AddSystemMessage("방 입장에 실패했습니다. (차단되었거나 인원이 가득 찼을 수 있습니다)");
+            }
+
+            _isProcessing = false;
         }
 
         private void OnActiveOpsPanelClicked()

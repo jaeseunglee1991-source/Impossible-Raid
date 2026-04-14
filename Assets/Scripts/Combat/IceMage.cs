@@ -1,37 +1,55 @@
 using UnityEngine;
-using BossRaid.Combat;
+using System.Collections;
+using BossRaid.Combat.Boss;
 
 namespace BossRaid.Combat.Classes
 {
     public class IceMage : CharacterBase
     {
-        protected override void Start()
+        protected override void Awake()
         {
-            base.Start();
+            base.Awake();
             role = CharacterRole.RangedDPS;
-            maxHealth = 1000f;
-            currentHealth = maxHealth;
-            characterName = "Ice Mage";
+            maxHealth = 1000f; currentHealth = maxHealth;
+            characterName = "냉기 마법사";
+            attackRange = 10f; autoAttackDamage = 35f; attackSpeed = 1.3f;
+            skillNames = new string[] { "얼음창", "얼음 화살", "얼음 보호막" };
+            skillCooldowns = new float[] { 15f, 4f, 18f };
+            ultimateName = "얼음 덩어리"; ultimateCooldown = 60f;
         }
 
-        public override void UseSkill(int skillIndex)
+        public override void UseSkill(int idx)
         {
-            switch (skillIndex)
+            switch (idx)
             {
-                case 0: IceLance(); break;
-                case 1: Frostbolt(); break;
-                case 2: IceBarrier(); break;
+                case 0: // 얼음창 (차단) - 관통 피해 + 1초 빙결
+                    if (targetBoss != null) { targetBoss.TakeDamage(280f * attackPowerMultiplier); targetBoss.Interrupt(); AddThreat(60f); }
+                    Debug.Log("<color=cyan>[냉기 마법사] 얼음창! 차단!</color>");
+                    break;
+                case 1: // 얼음 화살 - 피해 + 둔화
+                    if (targetBoss != null) { targetBoss.TakeDamage(130f * attackPowerMultiplier); AddThreat(30f); }
+                    Debug.Log("[냉기 마법사] 얼음 화살! 둔화 적용");
+                    break;
+                case 2: // 얼음 보호막 - 8초 피해 흡수
+                    shieldAmount = 500f;
+                    Debug.Log("<color=cyan>[냉기 마법사] 얼음 보호막! 500 피해 흡수</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            IceBlock();
+            StartCoroutine(IceBlock());
+            Debug.Log("<color=yellow>[냉기 마법사] 얼음 덩어리! 5초 무적!</color>");
         }
 
-        private void IceLance() => Debug.Log("[Ice Mage] Ice Lance! Freeze (Interrupt) & Damage.");
-        private void Frostbolt() => Debug.Log("[Ice Mage] Frostbolt! Slow 20%.");
-        private void IceBarrier() => Debug.Log("[Ice Mage] Ice Barrier! Absorbing damage for 8s.");
-        private void IceBlock() => Debug.Log("[Ice Mage] Ice Block! Invulnerable & Stun self.");
+        private IEnumerator IceBlock()
+        {
+            isInvulnerable = true;
+            movementSpeed = 0f;
+            yield return new WaitForSeconds(5f);
+            isInvulnerable = false;
+            movementSpeed = 5f;
+        }
     }
 }

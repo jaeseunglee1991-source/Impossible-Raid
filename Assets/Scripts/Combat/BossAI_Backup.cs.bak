@@ -1,0 +1,543 @@
+using UnityEngine;
+using System.Collections;
+using BossRaid.Combat;
+
+namespace BossRaid.Combat.Boss
+{
+    /// <summary>
+    /// 보스 AI - 어그로, 패턴 루프, 캐스팅, 스태거 시스템
+    /// </summary>
+    public class BossAI : MonoBehaviour
+    {
+        [Header("Boss Stats")]
+        public string bossName = "Belthazar, Lord of Flame";
+        public float maxHealth = 50000f;
+        public float currentHealth;
+        public float autoAttackDamage = 180f;
+        public float autoAttackInterval = 2.0f;
+
+        // [Optimization] 보스용 헬스 이벤트 (UI 연동 전용)
+        public event System.Action<float, float> OnHealthChanged;
+
+        [Header("Combat State")]
+        public bool isPhaseTwo = false;
+        public bool isPhaseThree = false;
+        public bool isEnraged = false;
+        public float currentShield = 0f;
+        public bool hasDpsCheckShield = false;
+        public System.Collections.Generic.List<CharacterBase> activePlayers = new System.Collections.Generic.List<CharacterBase>();
+        public CharacterBase currentTarget;
+
+        [Header("Casting")]
+        public bool isCasting = false;
+        public string currentCastName = "";
+        public float currentCastDuration = 0f;
+        public float currentCastProgress = 0f; // [New] 캐스팅 진행률 (0~1)
+        public bool canBeInterrupted = true;
+
+        [Header("Stagger")]
+        public float maxStagger = 1000f;
+        public float currentStagger = 0f;
+        public bool isStaggered = false;
+        public float staggerDuration = 3f;
+
+        [Header("UI (Distribution Optimized)")]
+        public UI.BossWorldHealthBar worldHealthBar;
+        private Animator _animator;
+        private Transform _visualPart;
+        private Vector3 _startLocalPos;
+        private const string WORLD_HP_BAR_PATH = "UI/BossWorldHPBar";
+
+        public void InitializeBattle(System.Collections.Generic.List<CharacterBase> players)
+        {
+            activePlayers = players;
+            currentHealth = maxHealth;
+            currentStagger = 0f;
+            isStaggered = false;
+
+            // 이벤트 호출 (초기화)
+            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+            // [배포 최적화] 머리 위 HP바 동적 소환 및 연동
+            SetupWorldUI();
+
+            StartCoroutine(BossPatternLoop());
+            StartCoroutine(AutoAttackLoop());
+        }
+
+        private void SetupWorldUI()
+        {
+            // 1. 이미 붙어있는지 확인
+            if (worldHealthBar == null) worldHealthBar = GetComponentInChildren<UI.BossWorldHealthBar>();
+            
+            // 2. 없다면 코드로 완전히 동적 생성 (프리팹 불필요!)
+            if (worldHealthBar == null)
+            {
+                GameObject hpBarObj = new GameObject($"{bossName}_WorldHPBar");
+                hpBarObj.transform.SetParent(null); // 독립 오브젝트 (보스 자식이 아닌 루트)
+                hpBarObj.transform.position = transform.position + Vector3.up * 3.0f;
+                worldHealthBar = hpBarObj.AddComponent<UI.BossWorldHealthBar>();
+                Debug.Log($"<color=green>[{bossName}] 월드 HP바 동적 생성 완료!</color>");
+            }
+
+            // 3. 데이터 연결
+            worldHealthBar.Setup(this);
+
+            // 4. 애니메이터 초기화 (드래곤 모델에 붙어있는 Animator 찾기)
+            _animator = GetComponentInChildren<Animator>();
+            if (_animator != null)
+            {
+                _animator.SetBool("InCombat", true);
+                _visualPart = _animator.transform; // 실제 드래곤 모델의 트랜스폼 저장
+                _startLocalPos = _visualPart.localPosition;
+            }
+        }
+
+        private CharacterBase GetHighestAggroTarget()
+        {
+            CharacterBase highest = null;
+            float maxThreat = -1f;
+            foreach (var p in activePlayers)
+            {
+                if (!p.IsDead && p.currentThreat > maxThreat)
+                {
+                    highest = p; maxThreat = p.currentThreat;
+                }
+            }
+            return highest;
+        }
+
+        private IEnumerator AutoAttackLoop()
+        {
+            while (currentHealth > 0)
+            {
+                if ((CombatManager.Instance != null && !CombatManager.Instance.isGameActive) || isStaggered || isCasting) 
+                { 
+                    yield return null; 
+                    continue; 
+                }
+
+                currentTarget = GetHighestAggroTarget();
+                if (currentTarget == null)
+                {
+                    Debug.Log($"<color=red>[{bossName}] 전멸! 생존한 플레이어가 없습니다.</color>");
+                    if (CombatManager.Instance != null && !CombatManager.Instance.IsPartyWiping) 
+                        CombatManager.Instance.OnPartyWipe();
+                        
+                    yield return new WaitForSeconds(2.0f);
+                    continue;
+                }
+
+                // 평타 데미지 처리
+                CharacterBase target = GetHighestAggroTarget();
+                if (target != null)
+                {
+                    // [Animation] 공격 트리거 발동
+                    if (_animator != null) _animator.SetTrigger("AttackTrigger");
+
+                    target.TakeDamage(autoAttackDamage);
+                }
+                Debug.Log($"<color=orange>[어그로 타격] {bossName} 가 {currentTarget.characterName} 을(를) 공격! (-{autoAttackDamage} HP) " + 
+                          $"(남은 HP: {currentTarget.currentHealth}, 현재 어그로: {currentTarget.currentThreat})</color>");
+
+                yield return new WaitForSeconds(autoAttackInterval);
+            }
+        }
+
+        private IEnumerator BossPatternLoop()
+        {
+            // 전투 루프 (30초 주기 반복)
+            while (currentHealth > 0)
+            {
+                if ((CombatManager.Instance != null && !CombatManager.Instance.isGameActive) || isStaggered) 
+                { 
+                    yield return null; 
+                    continue; 
+                }
+
+                if (isPhaseThree) yield return StartCoroutine(PhaseThreePattern());
+                else if (isPhaseTwo) yield return StartCoroutine(PhaseTwoPattern());
+                else yield return StartCoroutine(PhaseOnePattern());
+                
+                // 페이즈 체크
+                float healthPct = currentHealth / maxHealth;
+                if (!isPhaseTwo && healthPct <= 0.7f && healthPct > 0.4f)
+                {
+                    EnterPhaseTwo();
+                }
+                else if (!isPhaseThree && healthPct <= 0.4f)
+                {
+                    EnterPhaseThree();
+                }
+            }
+        }
+
+        private IEnumerator PhaseOnePattern()
+        {
+            // [0초] 불기둥 (Flame Strike) - 무작위 바닥 폭발
+            Debug.Log($"<color=red>[{bossName}] 불기둥 시전! (바닥 폭발 700 피해 - 회피 필요!)</color>");
+            CharacterBase target = GetRandomAliveTarget();
+            if (target != null)
+            {
+                yield return new WaitForSeconds(2f);
+                if (!target.CheckInvulnerable() && !target.IsDead) target.TakeDamage(700f);
+            }
+            else yield return new WaitForSeconds(2f);
+            
+            yield return new WaitForSeconds(8f);
+            if (isStaggered || currentHealth <= 0) yield break;
+
+            // [10초] 살아있는 폭탄 (Living Bomb) - 1인 타겟 후 주변 폭발
+            Debug.Log($"<color=red>[{bossName}] 살아있는 폭탄! (무작위 500 피해 + 주변 산개!)</color>");
+            CharacterBase bombTarget = GetRandomAliveTarget();
+            if (bombTarget != null)
+            {
+                yield return new WaitForSeconds(3f);
+                if (!bombTarget.CheckInvulnerable())
+                {
+                    bombTarget.TakeDamage(500f);
+                    foreach (var p in activePlayers)
+                    {
+                        if (p != bombTarget && !p.IsDead && Vector3.Distance(bombTarget.transform.position, p.transform.position) < 5f)
+                            if (!p.CheckInvulnerable()) p.TakeDamage(400f);
+                    }
+                }
+            }
+            else yield return new WaitForSeconds(3f);
+
+            yield return new WaitForSeconds(7f);
+            if (currentHealth <= 0) yield break;
+
+            // [20초] 발화 (Ignite - 차단 필수 기믹)
+            yield return StartCoroutine(CastPattern("발화 (Ignite)", 4f, true));
+            yield return new WaitForSeconds(6f);
+        }
+
+        private IEnumerator PhaseTwoPattern()
+        {
+            Debug.Log($"<color=red>[{bossName}] 화염 장벽(Flame Wall)! (회피 불가 지속 피해 추가!)</color>");
+            foreach (var p in activePlayers) if (!p.IsDead && !p.CheckInvulnerable()) p.TakeDamage(300f);
+            
+            yield return new WaitForSeconds(10f);
+            if (isStaggered || currentHealth <= 0) yield break;
+
+            Debug.Log($"<color=red>[{bossName}] 연쇄 메테오 방출! (대상자 집중 타격!)</color>");
+            CharacterBase target = GetRandomAliveTarget();
+            if (target != null && !target.CheckInvulnerable()) target.TakeDamage(600f);
+
+            yield return new WaitForSeconds(10f);
+            if (currentHealth <= 0) yield break;
+
+            yield return StartCoroutine(CastPattern("지옥불 소환", 3.5f, true));
+            yield return new WaitForSeconds(6.5f);
+        }
+
+        private IEnumerator PhaseThreePattern()
+        {
+            Debug.Log($"<color=red>[{bossName}] 노심 용융! 무차별 화염 폭발!</color>");
+            CharacterBase target1 = GetRandomAliveTarget();
+            if (target1 != null && !target1.CheckInvulnerable()) target1.TakeDamage(500f);
+            yield return new WaitForSeconds(1f);
+            CharacterBase target2 = GetRandomAliveTarget();
+            if (target2 != null && !target2.CheckInvulnerable()) target2.TakeDamage(500f);
+
+            yield return new WaitForSeconds(9f);
+            if (isStaggered || currentHealth <= 0) yield break;
+
+            yield return StartCoroutine(CastPattern("파멸의 안록스 (Wipe)", 5f, true));
+            yield return new WaitForSeconds(15f);
+        }
+
+        private CharacterBase GetRandomAliveTarget()
+        {
+            var alive = activePlayers.FindAll(p => !p.IsDead);
+            if (alive.Count == 0) return null;
+            return alive[Random.Range(0, alive.Count)];
+        }
+
+        /// <summary>캐스팅 패턴 실행</summary>
+        private IEnumerator CastPattern(string patternName, float duration, bool interruptable)
+        {
+            isCasting = true;
+            currentCastName = patternName;
+            currentCastDuration = duration;
+            canBeInterrupted = interruptable;
+            currentCastProgress = 0f;
+
+            // [Animation] 캐스팅 동작 시작
+            if (_animator != null) _animator.SetBool("Casting", true);
+            
+            // [Visual] 하늘로 점프/부양 시각 효과
+            if (_visualPart != null) StartCoroutine(FloatVisual(duration));
+
+            // HUD에 캐스팅 시작 통보
+            if (CombatManager.Instance != null)
+                CombatManager.Instance.NotifyBossCasting(patternName, duration);
+
+            Debug.Log($"<color=yellow>[{bossName}] 시전 중: {patternName} ({duration}초)</color>");
+
+            float elapsed = 0f;
+            while (elapsed < duration && isCasting)
+            {
+                elapsed += Time.deltaTime;
+                currentCastProgress = elapsed / duration;
+                yield return null;
+            }
+            currentCastProgress = 0f;
+
+            if (isCasting) // 차단 당하지 않음 (발동)
+            {
+                Debug.Log($"<color=red>[{bossName}] {patternName} 발동! 파티 전체 현재 체력 90% 감소!</color>");
+                foreach (var p in activePlayers)
+                {
+                    if (!p.IsDead && !p.CheckInvulnerable()) 
+                    {
+                        p.TakeDamage(p.currentHealth * 0.9f); // 현재 체력의 90% 피해
+                    }
+                }
+            }
+
+            isCasting = false;
+            // [Animation] 캐스팅 동작 종료
+            if (_animator != null) _animator.SetBool("Casting", false);
+        }
+
+        /// <summary>시전 중 하늘로 띄우는 시각 연출 (도약 및 강력한 착지)</summary>
+        private IEnumerator FloatVisual(float duration)
+        {
+            float elapsed = 0f;
+            float jumpHeight = 3.5f;   // 도약 높이
+            float jumpTime = 0.5f;     // 솟구치는 시간
+            
+            // 1. 도약 (Toss Up - 포물선 Ease-Out)
+            while (elapsed < jumpTime && isCasting)
+            {
+                elapsed += Time.deltaTime;
+                float t = elapsed / jumpTime;
+                // 포물선 곡선: h = sin(t * pi/2)
+                float h = Mathf.Sin(t * Mathf.PI * 0.5f) * jumpHeight;
+                _visualPart.localPosition = _startLocalPos + Vector3.up * h;
+                yield return null;
+            }
+
+            // 2. 체공 (Sustain/Bobbing)
+            while (elapsed < duration - 0.4f && isCasting)
+            {
+                elapsed += Time.deltaTime;
+                // 공중에서 미세하게 위아래로 흔들리며 날개짓 표현
+                float bob = Mathf.Sin(elapsed * 4f) * 0.2f;
+                _visualPart.localPosition = _startLocalPos + Vector3.up * (jumpHeight + bob);
+                yield return null;
+            }
+
+            // 3. 강력한 착지 (Heavy Impact - 가속도 Ease-In)
+            float landTime = 0.3f;
+            float landElapsed = 0f;
+            Vector3 midPos = _visualPart.localPosition;
+            while (landElapsed < landTime)
+            {
+                landElapsed += Time.deltaTime;
+                float t = landElapsed / landTime;
+                // 가속도 곡선: t^2
+                _visualPart.localPosition = Vector3.Lerp(midPos, _startLocalPos, t * t);
+                yield return null;
+            }
+            
+            _visualPart.localPosition = _startLocalPos;
+            Debug.Log("<color=red>[Combat] 💥 벨타자르 강습 착지! 대지 충격 발생!</color>");
+        }
+
+        /// <summary>캐스팅 차단 (외부 호출)</summary>
+        public void Interrupt()
+        {
+            if (!isCasting || !canBeInterrupted) return;
+            
+            isCasting = false;
+            
+            Debug.Log($"<color=cyan>[{bossName}] 차단 성공! 시간 보너스가 주어집니다.</color>");
+            if (CombatManager.Instance != null)
+            {
+                CombatManager.Instance.NotifyInterrupt();
+                CombatManager.Instance.AddTimeBonus(10f); // C. 타임 보너스 (10초 증가)
+            }
+        }
+
+        private void EnterPhaseTwo()
+        {
+            isPhaseTwo = true;
+            Debug.Log($"<color=red>[{bossName}] 2페이즈 진입! 발화 상태! (초당 15 화염 피해)</color>");
+            
+            if (CombatManager.Instance != null)
+                CombatManager.Instance.AdvancePhase();
+
+            StartCoroutine(PhaseTwoOverload());
+        }
+
+        private void EnterPhaseThree()
+        {
+            isPhaseThree = true;
+            Debug.Log($"<color=red>[{bossName}] 3페이즈 진입! 심연의 지옥불! (초당 30 폭발 피해)</color>");
+            Debug.Log($"<color=magenta>[{bossName}] 거대한 보호막 생성! 15초 내에 파괴하지 못하면 전멸합니다!</color>");
+            
+            if (CombatManager.Instance != null)
+                CombatManager.Instance.AdvancePhase();
+
+            StartCoroutine(PhaseThreeOverload());
+            StartCoroutine(DpsCheckRoutine()); // 3페이즈 한정 DPS 체크 기믹 도입
+        }
+
+        private IEnumerator DpsCheckRoutine()
+        {
+            // 난이도 조정: 최대 체력의 5% 쉴드
+            currentShield = maxHealth * 0.05f; 
+            hasDpsCheckShield = true;
+            float timer = 15f;
+
+            while (timer > 0 && hasDpsCheckShield && currentHealth > 0)
+            {
+                timer -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (hasDpsCheckShield && currentHealth > 0)
+            {
+                Debug.Log($"<color=red>[{bossName}] DPS 체크 실패! 파멸의 일격 발동!</color>");
+                foreach (var p in activePlayers) if (!p.IsDead) p.TakeDamage(999999f); // 즉사기
+                hasDpsCheckShield = false;
+            }
+            else if (!hasDpsCheckShield && currentHealth > 0 && timer > 0)
+            {
+                Debug.Log($"<color=cyan>[{bossName}] 보호막 파괴! DPS 체크 성공!</color>");
+            }
+        }
+
+        private IEnumerator PhaseTwoOverload()
+        {
+            // 2페이즈: 파티 전체 초당 15 지속 화염 피해
+            while (currentHealth > 0 && !isPhaseThree)
+            {
+                foreach (var p in activePlayers)
+                {
+                    if (!p.IsDead) p.TakeDamage(15f);
+                }
+                yield return new WaitForSeconds(1f);
+            }
+        }
+
+        private IEnumerator PhaseThreeOverload()
+        {
+            // 3페이즈: 초당 30 피해
+            while (currentHealth > 0)
+            {
+                foreach (var p in activePlayers)
+                {
+                    if (!p.IsDead) p.TakeDamage(30f);
+                }
+                yield return new WaitForSeconds(1f);
+            }
+        }
+
+        /// <summary>스태거 데미지 적용</summary>
+        public void AddStagger(float amount)
+        {
+            currentStagger += amount;
+            
+            // HUD 업데이트
+            if (UI.InGameHUDController.Instance != null && UI.InGameHUDController.Instance.bossFrame != null)
+                UI.InGameHUDController.Instance.bossFrame.AddStagger(amount);
+
+            if (currentStagger >= maxStagger)
+            {
+                StartCoroutine(StaggerCoroutine());
+            }
+        }
+
+        private IEnumerator StaggerCoroutine()
+        {
+            isStaggered = true;
+            currentStagger = 0f;
+            Debug.Log($"<color=blue>[{bossName}] 경직! {staggerDuration}초간 행동 불능!</color>");
+            
+            yield return new WaitForSeconds(staggerDuration);
+            
+            isStaggered = false;
+            Debug.Log($"[{bossName}] 경직 해제.");
+        }
+
+        public void TakeDamage(float amount)
+        {
+            if (currentHealth <= 0) return;
+
+            // B. DPS 체크 쉴드 타격 반영
+            if (hasDpsCheckShield)
+            {
+                currentShield -= amount;
+                if (currentShield <= 0) hasDpsCheckShield = false;
+                
+                // 쉴드가 있을 때는 본체에 데미지가 들어가지 않도록 return 처리
+                return;
+            }
+
+            currentHealth -= amount;
+            
+            // 이벤트 호출 (피해량 발생 시)
+            OnHealthChanged?.Invoke(currentHealth, maxHealth);
+
+            if (currentHealth <= 0)
+            {
+                currentHealth = 0;
+                // [Animation] 사망 애니메이션 재생
+                if (_animator != null) _animator.SetBool("IsDead", true);
+
+                Debug.Log($"{bossName} has been defeated!");
+
+                // 종료 연출 최적화 (성공 시 사운드 및 파티클 효과)
+                Debug.Log("<color=green>[System] 🎆 보스 처치 성공! 화려한 폭발 파티클 및 승리 BGM 재생!</color>");
+                // 실제 코드 예: Instantiate(Resources.Load("Effects/VictoryExplosion"), transform.position, Quaternion.identity);
+
+                if (CombatManager.Instance != null)
+                    CombatManager.Instance.EndBattle(true);
+            }
+        }
+
+        // A. 광폭화 (Enrage) 발동
+        public void TriggerEnrage()
+        {
+            if (isEnraged || currentHealth <= 0) return;
+            isEnraged = true;
+            
+            Debug.Log($"<color=red>[{bossName}] 타임 오버! 보스가 광폭화합니다! (공격력 500% 증가, 공격속도 대폭 상승!)</color>");
+            
+            autoAttackDamage *= 5f;
+            autoAttackInterval = 0.5f; // 평타 주기 2.0 -> 0.5초로 감소
+            targetSpeedMultiplier = 1.5f; // 굳이 필요하면 이동속도 등 추가
+
+            StartCoroutine(HardEnrageRoutine()); // D. 하드 인레이지 시작
+        }
+
+        // D. 하드 인레이지 발동 대기 (광폭화 30초 유지시 즉사 전멸기)
+        private IEnumerator HardEnrageRoutine()
+        {
+            Debug.Log($"<color=yellow>경고: 30초 뒤 확정 전멸기가 발동합니다!</color>");
+            yield return new WaitForSeconds(30f);
+
+            if (currentHealth > 0)
+            {
+                Debug.Log($"<color=red>[{bossName}] 하드 인레이지! 피할 수 없는 종말!</color>");
+                foreach (var p in activePlayers) if (!p.IsDead) p.TakeDamage(999999f);
+            }
+        }
+        
+        private float targetSpeedMultiplier = 1f;
+
+
+        [ContextMenu("Test Take Damage")]
+        public void TestDamage() => TakeDamage(1000f);
+
+        [ContextMenu("Force Phase 2")]
+        public void TestPhase2() => EnterPhaseTwo();
+
+        [ContextMenu("Test Interrupt")]
+        public void TestInterrupt() => Interrupt();
+    }
+}

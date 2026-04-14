@@ -1,68 +1,62 @@
 using UnityEngine;
-using BossRaid.Combat;
-using System.Collections.Generic;
+using System.Collections;
+using BossRaid.Combat.Boss;
 
 namespace BossRaid.Combat.Classes
 {
     public class Paladin : CharacterBase
     {
-        [Header("Paladin Skills")]
-        public float shieldBashCooldown = 10f;
-        public float holyLightCooldown = 8f;
-        public float devotionAuraCooldown = 20f;
-        public float bubbleCooldown = 60f;
-
-        protected override void Start()
+        protected override void Awake()
         {
-            base.Start();
+            base.Awake();
             role = CharacterRole.Tank;
-            maxHealth = 2500f; // 초기 기획 스펙
-            currentHealth = maxHealth;
-            characterName = "Paladin";
+            maxHealth = 2500f; currentHealth = maxHealth;
+            characterName = "팔라딘";
+            attackRange = 3f; autoAttackDamage = 40f; attackSpeed = 1.5f;
+            skillNames = new string[] { "정의의 방패", "성스러운 빛", "헌신적 오라" };
+            skillCooldowns = new float[] { 10f, 8f, 20f };
+            ultimateName = "천상의 보호막"; ultimateCooldown = 60f;
         }
 
-        private void Update()
+        public override void UseSkill(int idx)
         {
-            // 스킬 쿨다운 티킹 소망 (나중에 추상화 가능)
-        }
-
-        public override void UseSkill(int skillIndex)
-        {
-            switch (skillIndex)
+            switch (idx)
             {
-                case 0: ShieldBash(); break;
-                case 1: HolyLight(); break;
-                case 2: DevotionAura(); break;
+                case 0: // 정의의 방패 (차단) - 피해 + 1초 기절 + 어그로
+                    if (targetBoss != null) { targetBoss.TakeDamage(200f); targetBoss.Interrupt(); AddThreat(500f); }
+                    Debug.Log("<color=blue>[팔라딘] 정의의 방패! 차단 + 어그로 대폭 획득</color>");
+                    break;
+                case 1: // 성스러운 빛 - 자신+주변 1명 힐
+                    Heal(400f);
+                    var lowestAlly = FindLowestHPAlly();
+                    if (lowestAlly != null && lowestAlly != this) lowestAlly.Heal(400f);
+                    Debug.Log("<color=green>[팔라딘] 성스러운 빛! 자신+아군 회복</color>");
+                    break;
+                case 2: // 헌신적 오라 - 6초간 파티 피해 30% 감소
+                    StartCoroutine(DevotionAura());
+                    Debug.Log("<color=cyan>[팔라딘] 헌신적 오라! 6초간 파티 피해 30% 감소</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            DivineShield();
+            StartCoroutine(DivineShield());
+            Debug.Log("<color=yellow>[팔라딘] 천상의 보호막! 5초간 무적!</color>");
         }
 
-        private void ShieldBash()
+        private IEnumerator DevotionAura()
         {
-            Debug.Log("[Paladin] Shield Bash! Interrupting & Gaining Aggro.");
-            // 타겟에게 데미지 + 어그로 + 차단 처리
+            ApplyPartyBuff(p => p.damageReductionMultiplier = 0.7f);
+            yield return new WaitForSeconds(6f);
+            ApplyPartyBuff(p => p.damageReductionMultiplier = 1f);
         }
 
-        private void HolyLight()
+        private IEnumerator DivineShield()
         {
-            Debug.Log("[Paladin] Holy Light! Healing self or ally.");
-            // 체력 즉시 회복
-        }
-
-        private void DevotionAura()
-        {
-            Debug.Log("[Paladin] Devotion Aura! Reducing party damage by 30%.");
-            // 파티 버프 적용 (6초)
-        }
-
-        private void DivineShield()
-        {
-            Debug.Log("[Paladin] Divine Shield! Invulnerable for 5 seconds.");
-            // 무적 상태 부여
+            isInvulnerable = true;
+            yield return new WaitForSeconds(5f);
+            isInvulnerable = false;
         }
     }
 }

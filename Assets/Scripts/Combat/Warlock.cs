@@ -1,37 +1,80 @@
 using UnityEngine;
-using BossRaid.Combat;
+using System.Collections;
+using BossRaid.Combat.Boss;
 
 namespace BossRaid.Combat.Classes
 {
     public class Warlock : CharacterBase
     {
-        protected override void Start()
+        protected override void Awake()
         {
-            base.Start();
+            base.Awake();
             role = CharacterRole.RangedDPS;
-            maxHealth = 1000f;
-            currentHealth = maxHealth;
-            characterName = "Warlock";
+            maxHealth = 1000f; currentHealth = maxHealth;
+            characterName = "흑마법사";
+            attackRange = 10f; autoAttackDamage = 30f; attackSpeed = 1.4f;
+            skillNames = new string[] { "어둠의 화살", "부패", "생명력 흡수" };
+            skillCooldowns = new float[] { 14f, 6f, 10f };
+            ultimateName = "지옥불 정령"; ultimateCooldown = 80f;
         }
 
-        public override void UseSkill(int skillIndex)
+        public override void UseSkill(int idx)
         {
-            switch (skillIndex)
+            switch (idx)
             {
-                case 0: ShadowBolt(); break;
-                case 1: Corruption(); break;
-                case 2: DrainLife(); break;
+                case 0: // 어둠의 화살 (차단) - 암흑 피해 + 공포 + 차단
+                    if (targetBoss != null) { targetBoss.TakeDamage(250f * attackPowerMultiplier); targetBoss.Interrupt(); AddThreat(50f); }
+                    Debug.Log("<color=purple>[흑마법사] 어둠의 화살! 차단!</color>");
+                    break;
+                case 1: // 부패 - 12초 DOT
+                    if (targetBoss != null) StartCoroutine(Corruption());
+                    Debug.Log("<color=green>[흑마법사] 부패! 12초 지속 피해</color>");
+                    break;
+                case 2: // 생명력 흡수 - 채널링 피해 + 자힐
+                    StartCoroutine(DrainLife());
+                    Debug.Log("<color=red>[흑마법사] 생명력 흡수!</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            Infernal();
+            StartCoroutine(InfernalSummon());
+            Debug.Log("<color=yellow>[흑마법사] 지옥불 정령! 운석 낙하 + 정령 소환!</color>");
         }
 
-        private void ShadowBolt() => Debug.Log("[Warlock] Shadow Bolt! Fear & Interrupt.");
-        private void Corruption() => Debug.Log("[Warlock] Corruption! 12s DOT damage.");
-        private void DrainLife() => Debug.Log("[Warlock] Drain Life! Channel & Heal self.");
-        private void Infernal() => Debug.Log("[Warlock] Infernal! Summon Golem & Stun boss.");
+        private IEnumerator Corruption()
+        {
+            for (int i = 0; i < 12; i++)
+            {
+                if (targetBoss != null) { targetBoss.TakeDamage(35f * attackPowerMultiplier); AddThreat(8f); }
+                yield return new WaitForSeconds(1f);
+            }
+        }
+
+        private IEnumerator DrainLife()
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                float dmg = 50f * attackPowerMultiplier;
+                if (targetBoss != null) { targetBoss.TakeDamage(dmg); AddThreat(10f); }
+                Heal(dmg * 0.8f);
+                yield return new WaitForSeconds(0.5f);
+            }
+        }
+
+        private IEnumerator InfernalSummon()
+        {
+            // 운석 충돌 (초기 피해)
+            if (targetBoss != null) targetBoss.TakeDamage(400f);
+            // 15초간 정령 DPS
+            float elapsed = 0f;
+            while (elapsed < 15f)
+            {
+                if (targetBoss != null) targetBoss.TakeDamage(25f);
+                elapsed += 1f;
+                yield return new WaitForSeconds(1f);
+            }
+        }
     }
 }

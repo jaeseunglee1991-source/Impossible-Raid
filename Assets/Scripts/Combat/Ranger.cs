@@ -1,37 +1,62 @@
 using UnityEngine;
-using BossRaid.Combat;
+using System.Collections;
+using BossRaid.Combat.Boss;
 
 namespace BossRaid.Combat.Classes
 {
     public class Ranger : CharacterBase
     {
-        protected override void Start()
+        protected override void Awake()
         {
-            base.Start();
+            base.Awake();
             role = CharacterRole.RangedDPS;
-            maxHealth = 1000f;
-            currentHealth = maxHealth;
-            characterName = "Ranger";
+            maxHealth = 1000f; currentHealth = maxHealth;
+            characterName = "레인저";
+            attackRange = 12f; autoAttackDamage = 45f; attackSpeed = 1f;
+            skillNames = new string[] { "관통의 화살", "일제 사격", "사냥꾼의 징표" };
+            skillCooldowns = new float[] { 12f, 8f, 20f };
+            ultimateName = "속사"; ultimateCooldown = 50f;
         }
 
-        public override void UseSkill(int skillIndex)
+        public override void UseSkill(int idx)
         {
-            switch (skillIndex)
+            switch (idx)
             {
-                case 0: PiercingArrow(); break;
-                case 1: MultiShot(); break;
-                case 2: HuntersMark(); break;
+                case 0: // 관통의 화살 (차단) - 방어력 무시 + 차단
+                    if (targetBoss != null) { targetBoss.TakeDamage(280f); targetBoss.Interrupt(); AddThreat(40f); }
+                    Debug.Log("<color=orange>[레인저] 관통의 화살! 차단!</color>");
+                    break;
+                case 1: // 일제 사격 - 광역 피해
+                    if (targetBoss != null) { targetBoss.TakeDamage(250f * attackPowerMultiplier); AddThreat(60f); }
+                    Debug.Log("[레인저] 일제 사격! 광역 피해");
+                    break;
+                case 2: // 사냥꾼의 징표 - 10초 피해 10% 증가 디버프
+                    if (targetBoss != null) StartCoroutine(HuntersMark());
+                    Debug.Log("<color=cyan>[레인저] 사냥꾼의 징표! 10초 피해 10% 증가</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            RapidFire();
+            StartCoroutine(RapidFire());
+            Debug.Log("<color=yellow>[레인저] 속사! 5초간 초고속 평타!</color>");
         }
 
-        private void PiercingArrow() => Debug.Log("[Ranger] Piercing Arrow! Ignore armor & Silence.");
-        private void MultiShot() => Debug.Log("[Ranger] Multi-Shot! AOE rain damage.");
-        private void HuntersMark() => Debug.Log("[Ranger] Hunter's Mark! Boss takes 10% more damage.");
-        private void RapidFire() => Debug.Log("[Ranger] Rapid Fire! Move & Shoot + Attack Speed up.");
+        private IEnumerator HuntersMark()
+        {
+            // 보스 받는 피해 증가 (간접적 구현: 파티 공격력 증가)
+            ApplyPartyBuff(p => p.attackPowerMultiplier *= 1.1f);
+            yield return new WaitForSeconds(10f);
+            ApplyPartyBuff(p => p.attackPowerMultiplier = 1f);
+        }
+
+        private IEnumerator RapidFire()
+        {
+            float orig = attackSpeed;
+            attackSpeed = 0.3f; // 매우 빠른 공격
+            yield return new WaitForSeconds(5f);
+            attackSpeed = orig;
+        }
     }
 }

@@ -587,18 +587,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.UI.LoginUIController
   loginPanel: {fileID: 0}
-  emailInput: {fileID: 0}
-  passwordInput: {fileID: 0}
-  loginButton: {fileID: 0}
-  loginButtonText: {fileID: 0}
-  goToSignUpButton: {fileID: 0}
-  signUpPanel: {fileID: 0}
-  signUpEmailInput: {fileID: 0}
-  signUpPasswordInput: {fileID: 0}
-  signUpNicknameInput: {fileID: 0}
-  signUpButton: {fileID: 0}
-  signUpButtonText: {fileID: 0}
-  goToLoginButton: {fileID: 0}
+  googleLoginButton: {fileID: 0}
+  guestLoginButton: {fileID: 0}
+  loadingStatusText: {fileID: 0}
   popupPanel: {fileID: 0}
   popupText: {fileID: 0}
   popupCloseButton: {fileID: 0}

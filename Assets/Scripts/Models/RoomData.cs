@@ -29,6 +29,12 @@ namespace BossRaid.Models
         [Column("participants")]
         public string participants { get; set; }
 
+        [Column("banned_user_ids")]
+        public string banned_user_ids { get; set; }
+
+        [Column("max_participants")]
+        public int max_participants { get; set; } = 5;
+
         [Column("created_at")]
         public DateTime created_at { get; set; }
     }

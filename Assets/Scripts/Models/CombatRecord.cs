@@ -11,6 +11,7 @@ namespace BossRaid.Models
         public float totalDamage;
         public float totalHealing;
         public float totalDamageTaken;
+        public float aggroDuration;
         public bool isMvp;
 
         public CombatRecord(string id, string nick, string r)
@@ -21,6 +22,7 @@ namespace BossRaid.Models
             totalDamage = 0;
             totalHealing = 0;
             totalDamageTaken = 0;
+            aggroDuration = 0;
             isMvp = false;
         }
     }

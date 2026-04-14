@@ -1,81 +1,116 @@
 using UnityEngine;
 using System.Collections;
 using BossRaid.Combat;
+using BossRaid.UI;
 
 namespace BossRaid.Combat.Player
 {
+    /// <summary>
+    /// 2D 쿼터뷰 플레이어 조작 컨트롤러
+    /// - 이동: XY 축 기반 (Vector2)
+    /// - 방향 전환: SpriteRenderer.flipX (3D transform.forward 완전 제거)
+    /// - 키보드 + 가상 조이스틱 이중 지원
+    /// </summary>
     public class PlayerController : MonoBehaviour
     {
         public CharacterBase characterInfo;
         public float dashDistance = 5f;
         public float dashCooldown = 5f;
         public float dashDuration = 0.5f;
-        
-        private float nextDashTime = 0f;
-        private bool isInvulnerable = false;
-        private Vector3 moveInput;
+
+        private float _nextDashTime = 0f;
+        private Vector2 _moveInput;              // 2D: Vector2 (XY)
+
+        private SpriteRenderer _spriteRenderer;  // 2D 방향 반전용
+        private Animator _animator;
+
+        private void Awake()
+        {
+            _spriteRenderer = GetComponentInChildren<SpriteRenderer>();
+            _animator = GetComponentInChildren<Animator>();
+        }
 
         private void Update()
         {
             HandleMovement();
-            HandleAutoAttack();
-            HandleSkills();
-
-            if (Input.GetKeyDown(KeyCode.Space)) Dash();
         }
 
         private void HandleMovement()
         {
-            float horizontal = Input.GetAxisRaw("Horizontal");
-            float vertical = Input.GetAxisRaw("Vertical");
-            moveInput = new Vector3(horizontal, 0f, vertical).normalized;
+            float horizontal = 0f;
+            float vertical   = 0f;
 
-            if (moveInput.magnitude >= 0.1f)
+            // 1. 키보드 입력
+            var keyboard = UnityEngine.InputSystem.Keyboard.current;
+            if (keyboard != null)
             {
-                transform.position += moveInput * characterInfo.movementSpeed * Time.deltaTime;
-                transform.forward = moveInput; // 이동 방향 바라보기
+                if (keyboard.upArrowKey.isPressed)    vertical   += 1f;
+                if (keyboard.downArrowKey.isPressed)  vertical   -= 1f;
+                if (keyboard.leftArrowKey.isPressed)  horizontal -= 1f;
+                if (keyboard.rightArrowKey.isPressed) horizontal += 1f;
+            }
+
+            _moveInput = new Vector2(horizontal, vertical).normalized;
+
+            // 2. 가상 조이스틱 입력 (우선순위)
+            if (InGameHUDController.Instance != null && InGameHUDController.Instance.joystick != null)
+            {
+                var joyDir = InGameHUDController.Instance.joystick.InputDirection;
+                if (joyDir.magnitude > 0.1f)
+                    _moveInput = joyDir.normalized;
+            }
+
+            if (_moveInput.magnitude >= 0.1f)
+            {
+                // ── 2D XY 이동 (Z 고정) ──
+                transform.position += new Vector3(_moveInput.x, _moveInput.y, 0f)
+                                      * characterInfo.movementSpeed * Time.deltaTime;
+
+                // ── 좌우 스프라이트 반전 (3D rotation 대체) ──
+                if (_spriteRenderer != null)
+                    _spriteRenderer.flipX = (_moveInput.x < 0f);
+
+                // ── 애니메이터 파라미터 전달 ──
+                if (_animator != null)
+                {
+                    _animator.SetFloat("MoveX", _moveInput.x);
+                    _animator.SetFloat("MoveY", _moveInput.y);
+                    _animator.SetFloat("MovementSpeed", _moveInput.magnitude);
+                }
+            }
+            else
+            {
+                if (_animator != null) _animator.SetFloat("MovementSpeed", 0f);
             }
         }
 
-        private void HandleAutoAttack()
+        /// <summary>HUD Dodge 버튼 또는 Space 키에서 호출</summary>
+        public void Dash()
         {
-            // 가장 가까운 적(보스) 감지 후 사거리 내면 자동 공격
-            // characterInfo.AutoAttackTarget(FindNearestBoss());
-        }
-
-        private void HandleSkills()
-        {
-            if (Input.GetKeyDown(KeyCode.Q)) characterInfo.UseSkill(0);
-            if (Input.GetKeyDown(KeyCode.W)) characterInfo.UseSkill(1);
-            if (Input.GetKeyDown(KeyCode.E)) characterInfo.UseSkill(2);
-            if (Input.GetKeyDown(KeyCode.R)) characterInfo.UseUltimate();
-        }
-
-        private void Dash()
-        {
-            if (Time.time < nextDashTime) return;
-
+            if (Time.time < _nextDashTime) return;
             StartCoroutine(PerformDash());
-            nextDashTime = Time.time + dashCooldown;
+            _nextDashTime = Time.time + dashCooldown;
         }
 
         private IEnumerator PerformDash()
         {
-            isInvulnerable = true;
+            if (characterInfo != null) characterInfo.isInvulnerable = true;
             Debug.Log("[Combat] Dashing! Invulnerable for 0.5s.");
-            
-            Vector3 dashDir = moveInput == Vector3.zero ? transform.forward : moveInput;
+
+            // 2D 대시: XY 방향 사용
+            Vector2 dashDir = _moveInput.magnitude > 0.1f ? _moveInput : Vector2.right;
             float startTime = Time.time;
-            
+
             while (Time.time < startTime + dashDuration)
             {
-                transform.position += dashDir * (dashDistance / dashDuration) * Time.deltaTime;
+                transform.position += new Vector3(dashDir.x, dashDir.y, 0f)
+                                      * (dashDistance / dashDuration) * Time.deltaTime;
                 yield return null;
             }
 
-            isInvulnerable = false;
+            if (characterInfo != null) characterInfo.isInvulnerable = false;
         }
 
-        public bool CheckInvulnerable() => isInvulnerable;
+        public bool IsInvulnerable() => characterInfo != null && characterInfo.isInvulnerable;
     }
 }

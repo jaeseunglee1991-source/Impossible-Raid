@@ -41,7 +41,8 @@ namespace BossRaid.UI
         //  씬 전환
         // ─────────────────────────────────────────────
         [Header("Scene Settings")]
-        public string lobbySceneName = "LobbyScene";
+        // [기존 public 필드 삭제 혹은 주석 처리하여 인스펙터 override 방지]
+        private const string TARGET_INGAME_SCENE = "InGameScene";
 
         // ─────────────────────────────────────────────
         //  상태 관리
@@ -85,6 +86,10 @@ namespace BossRaid.UI
                 SetLoadingState(false);
                 ShowPopup(AuthManager.Instance.LastError ?? "Google 로그인 실패");
             }
+            else
+            {
+                GoToInGame();
+            }
         }
 
         // ─────────────────────────────────────────────
@@ -107,7 +112,7 @@ namespace BossRaid.UI
 
                 if (success)
                 {
-                    ShowPopup("게스트 로그인 성공!\n데이터가 기기에 저장됩니다.", autoClose: true, onClose: GoToLobby);
+                    GoToInGame();
                 }
                 else
                 {
@@ -181,10 +186,10 @@ namespace BossRaid.UI
         // ─────────────────────────────────────────────
         //  씬 전환
         // ─────────────────────────────────────────────
-        public void GoToLobby()
+        public void GoToInGame()
         {
-            Debug.Log($"[LoginUIController] Loading scene: {lobbySceneName}");
-            SceneManager.LoadScene(lobbySceneName);
+            Debug.Log($"[LoginUIController] Loading target scene: {TARGET_INGAME_SCENE}");
+            SceneManager.LoadScene(TARGET_INGAME_SCENE);
         }
     }
 }
