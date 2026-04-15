@@ -3,18 +3,15 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using BossRaid.Models;
 using BossRaid.Managers;
-using Supabase.Realtime;
 using Newtonsoft.Json;
 using System;
 using System.Linq;
-using Supabase.Postgrest; // 변경된 네임스페이스
 
 namespace BossRaid.Managers
 {
     public class LobbyManager : MonoBehaviour
     {
         public static LobbyManager Instance { get; private set; }
-        private RealtimeChannel lobbyChannel;
 
         private void Awake()
         {
@@ -99,23 +96,6 @@ namespace BossRaid.Managers
                 Debug.LogError($"[LobbyManager] Get room list failed at GetRoomList: {ex.Message}\n{ex.StackTrace}");
                 return new List<RoomData>();
             }
-        }
-
-        public async Task JoinLobbyChat(Action<string, string> onMessageReceived)
-        {
-            lobbyChannel = DatabaseManager.Instance.Client.Realtime.Channel("lobby-chat");
-            
-            // lobbyChannel.OnBroadcast("message", (msg) => { ... });
-
-            await lobbyChannel.Subscribe();
-        }
-
-        public async Task SendChatMessage(string user, string text)
-        {
-            await Task.Yield();
-            if (lobbyChannel == null) return;
-            var payload = new Dictionary<string, object> { { "user", user }, { "text", text } };
-            // await lobbyChannel.Send("message", payload);
         }
 
         public async Task<bool> JoinRoom(RoomData room)
