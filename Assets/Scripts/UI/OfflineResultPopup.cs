@@ -1,76 +1,83 @@
 using UnityEngine;
-using TMPro; // TextMeshPro 지원
+using TMPro;
 using System;
-using BossRaid.Utils; // CurrencyFormatter 사용
+using BossRaid.Utils;
+using BossRaid.Managers; // GrowthManager 및 AdManager 참조용
 
 namespace BossRaid.UI
 {
     /// <summary>
     /// ──────────────────────────────────────────────────────────────────
-    /// OfflineResultPopup — 오프라인 복귀 시 획득한 재화를 보여주는 UI 팝업
+    /// OfflineResultPopup — 오프라인 보상 팝업 (+ 광고 보고 2배 받기 연동)
     /// ──────────────────────────────────────────────────────────────────
     /// </summary>
     public class OfflineResultPopup : MonoBehaviour
     {
         [Header("UI 연결 요소")]
-        [Tooltip("팝업 창의 전체 배경/부모 패널 오브젝트")]
         public GameObject popupPanel;               
-        
-        [Tooltip("경과 시간을 표시할 텍스트 (예: '1시간 20분')")]
         public TextMeshProUGUI timeText;       
-        
-        [Tooltip("획득한 골드를 표시할 텍스트 (예: '+ 1.50M Gold')")]
         public TextMeshProUGUI rewardAmountText; 
+        
+        [Header("버튼 연결")]
+        public GameObject doubleRewardButton; // 광고 시청 후 버튼을 숨기기 위해 참조
+
+        private double baseRewardAmount; // 저장해둘 기본 보상금액
 
         private void Awake()
         {
-            // 게임 시작 시 팝업이 켜져있으면 자동으로 끕니다.
-            if (popupPanel != null)
-            {
-                popupPanel.SetActive(false);
-            }
+            if (popupPanel != null) popupPanel.SetActive(false);
         }
 
-        /// <summary>
-        /// OfflineRewardManager에서 계산을 마치고 이 함수를 호출하여 팝업을 띄웁니다.
-        /// </summary>
-        /// <param name="elapsed">오프라인 경과 시간</param>
-        /// <param name="reward">획득한 총 골드량</param>
         public void Show(TimeSpan elapsed, double reward)
         {
             if (popupPanel == null) return;
 
-            // 시간 문자열 포맷팅
+            // 보상 금액 임시 저장 (광고 2배 지급 시 사용)
+            baseRewardAmount = reward;
+
             string timeStr = "";
             if (elapsed.Days > 0) timeStr += $"{elapsed.Days}일 ";
             if (elapsed.Hours > 0) timeStr += $"{elapsed.Hours}시간 ";
             timeStr += $"{elapsed.Minutes}분";
 
-            // UI 텍스트 적용 (색상 태그 포함)
-            if (timeText != null)
-            {
-                timeText.text = $"<color=#FFD700>{timeStr}</color> 동안 파티가 열심히 사냥하여";
-            }
+            if (timeText != null) timeText.text = $"<color=#FFD700>{timeStr}</color> 동안 파티가 열심히 사냥하여";
+            if (rewardAmountText != null) rewardAmountText.text = $"+ {reward.ToCurrencyString()} Gold";
 
-            if (rewardAmountText != null)
-            {
-                // ToCurrencyString()은 이전에 추가한 CurrencyFormatter.cs의 확장 메서드입니다.
-                rewardAmountText.text = $"+ {reward.ToCurrencyString()} Gold";
-            }
+            // 팝업 열릴 때 광고 버튼 활성화
+            if (doubleRewardButton != null) doubleRewardButton.SetActive(true);
 
-            // 팝업 활성화
             popupPanel.SetActive(true);
         }
 
         /// <summary>
-        /// 팝업의 [확인] 버튼 클릭 시 연결할 함수입니다.
+        /// (일반) '확인' 버튼 클릭 시 - 추가 보상 없이 창 닫기
         /// </summary>
         public void OnClickClosePopup()
         {
-            if (popupPanel != null)
+            if (popupPanel != null) popupPanel.SetActive(false);
+        }
+
+        /// <summary>
+        /// (광고) '광고 보고 2배 획득' 버튼 클릭 시
+        /// </summary>
+        public void OnClickAdDoubleReward()
+        {
+            // AdManager에 광고 재생을 요청하고, 다 봤을 때 실행할 람다 함수(Action)를 넘겨줍니다.
+            AdManager.Instance.ShowRewardedAd(() => 
             {
-                popupPanel.SetActive(false);
-            }
+                // 보상 지급 (처음에 받은 만큼 한 번 더 지급 = 총 2배)
+                GrowthManager.Instance.AddGold(baseRewardAmount);
+                
+                // UI 텍스트 업데이트 (시각적 피드백)
+                if (rewardAmountText != null) 
+                {
+                    double totalReward = baseRewardAmount * 2;
+                    rewardAmountText.text = $"<color=#00FF00>+ {totalReward.ToCurrencyString()} Gold (x2)</color>";
+                }
+
+                // 버튼 숨기기 (광고는 1회만 볼 수 있도록)
+                if (doubleRewardButton != null) doubleRewardButton.SetActive(false);
+            });
         }
     }
 }
