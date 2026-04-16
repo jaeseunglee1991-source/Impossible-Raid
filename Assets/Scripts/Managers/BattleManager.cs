@@ -1,112 +1,255 @@
 using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using BossRaid.Combat;
+using BossRaid.UI;
 
-public enum GameState { IdleFarming, BossChallenge } // StageManager에 있다면 삭제 가능
-
-public class BattleManager : MonoBehaviour
+namespace BossRaid.Managers
 {
-    public static BattleManager Instance { get; private set; }
-
-    [Header("상태 관리 (테스트용)")]
-    public GameState currentState = GameState.IdleFarming; // 실제로는 StageManager.Instance.CurrentState 사용 권장
-
-    [Header("캐릭터 프리팹")]
-    public GameObject warriorPrefab;
-    public GameObject roguePrefab;
-    public GameObject magePrefab;
-    public GameObject healerPrefab;
-
-    [Header("방치형 모드 4인 스폰 위치")]
-    public Transform[] idleSpawnPoints; // Inspector에서 4개의 위치 할당 필요
-
-    [Header("레이드 모드 스폰 위치")]
-    public Transform raidSpawnPoint;
-
-    [Header("보스 프리팹")]
-    public GameObject idleBossPrefab;
-    public GameObject raidBossPrefab;
-    public Transform bossSpawnPoint;
-
-    private List<GameObject> activeCharacters = new List<GameObject>();
-    private GameObject currentBoss;
-
-    private void Awake()
+    /// <summary>
+    /// ──────────────────────────────────────────────────────────────────
+    /// BattleManager  —  파티 태그(Tag) 시스템 + 게임오버 판정 + 부활 중계
+    /// ──────────────────────────────────────────────────────────────────
+    /// ■ 구조
+    ///   파티1 (멤버 2명) / 파티2 (멤버 2명)
+    ///   한 파티씩 '활성화(태그-인)' 되고 나머지는 SetActive(false) 상태
+    ///   단, CharacterStatus 데이터(HP/MP/쿨타임)는 메모리에 유지됨
+    ///
+    /// ■ 게임오버 조건
+    ///   현재 전투 중인 활성 파티 2명이 모두 사망 → 즉시 보스전 실패
+    ///
+    /// ■ HUD 연동
+    ///   우측 하단: 파티 전환 버튼 → SwitchParty()
+    ///            현재 파티 내 캐릭터 교체 버튼 → SwitchActiveCharacter(index)
+    /// ──────────────────────────────────────────────────────────────────
+    /// </summary>
+    public class BattleManager : MonoBehaviour
     {
-        if (Instance == null) Instance = this;
-        else Destroy(gameObject);
-    }
+        public static BattleManager Instance { get; private set; }
 
-    private void Start()
-    {
-        InitializeBattle();
-    }
+        // ──────────────────────────────────────────────
+        // 파티 구성 (Inspector 에서 할당)
+        // ──────────────────────────────────────────────
+        [Header("Party 1 (직업 2명)")]
+        public List<TagCharacterController> Party1 = new List<TagCharacterController>();
 
-    public void InitializeBattle()
-    {
-        ClearBattlefield();
+        [Header("Party 2 (직업 2명)")]
+        public List<TagCharacterController> Party2 = new List<TagCharacterController>();
 
-        if (currentState == GameState.IdleFarming)
+        // ──────────────────────────────────────────────
+        // 상태
+        // ──────────────────────────────────────────────
+        [Header("Current State (Read-Only)")]
+        [SerializeField] private int _activePartyIndex = 1;  // 1 or 2
+        [SerializeField] private int _activeCharacterIndex = 0;
+
+        public int ActivePartyIndex  => _activePartyIndex;
+        public bool IsGameOver       { get; private set; } = false;
+
+        /// <summary>현재 플레이어가 직접 조작 중인 캐릭터</summary>
+        public TagCharacterController ActivePlayerCharacter { get; private set; }
+
+        // ReviveService에서 사용하는 공개 파티 접근자
+        public List<TagCharacterController> ActiveParty  => _activePartyIndex == 1 ? Party1 : Party2;
+        public List<TagCharacterController> InactiveParty => _activePartyIndex == 1 ? Party2 : Party1;
+
+        // ──────────────────────────────────────────────
+        // Unity 생명주기
+        // ──────────────────────────────────────────────
+        private void Awake()
         {
-            SetupIdleFarmingMode();
+            if (Instance != null && Instance != this) { Destroy(gameObject); return; }
+            Instance = this;
         }
-        else if (currentState == GameState.BossChallenge)
+
+        private void Start()
         {
-            SetupBossRaidMode();
+            // 1파티 선 활성화, 2파티 대기
+            ActivateParty(1, forceFirstCharacter: true);
         }
-    }
 
-    private void SetupIdleFarmingMode()
-    {
-        Debug.Log("방치형 전투 모드 셋업 시작 (4인 동시 타격)");
-
-        // 1. 태그 UI 숨기기 (UIManager.Instance.ToggleTagUI(false) 등 호출)
-
-        // 2. 4명의 캐릭터 스폰 및 리스트 등록
-        SpawnCharacter(warriorPrefab, idleSpawnPoints[0].position, true);
-        SpawnCharacter(roguePrefab, idleSpawnPoints[1].position, true);
-        SpawnCharacter(magePrefab, idleSpawnPoints[2].position, true);
-        SpawnCharacter(healerPrefab, idleSpawnPoints[3].position, true);
-
-        // 3. 방치형 보스 스폰 (1% 재화 루프 적용)
-        currentBoss = Instantiate(idleBossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation);
-    }
-
-    private void SetupBossRaidMode()
-    {
-        Debug.Log("보스 레이드 모드 셋업 시작 (태그 시스템)");
-
-        // 1. 태그 UI 보이기
-
-        // 2. 레이드용 스폰 (기존 로직: 메인 캐릭터 1명 스폰 후 태그 대기)
-        SpawnCharacter(warriorPrefab, raidSpawnPoint.position, false);
-
-        // 3. 레이드 보스 스폰 (패턴이 있는 보스)
-        currentBoss = Instantiate(raidBossPrefab, bossSpawnPoint.position, bossSpawnPoint.rotation);
-    }
-
-    private void SpawnCharacter(GameObject prefab, Vector3 position, bool isIdleMode)
-    {
-        if (prefab == null) return;
-
-        GameObject charObj = Instantiate(prefab, position, Quaternion.identity);
-        activeCharacters.Add(charObj);
-
-        TagCharacterController controller = charObj.GetComponent<TagCharacterController>();
-        if (controller != null)
+        // ──────────────────────────────────────────────
+        // 파티 전환 (HUD 파티 교체 버튼 → 호출)
+        // ──────────────────────────────────────────────
+        /// <summary>
+        /// 철권 태그 방식 파티 교체.
+        /// 대기 파티의 Status(HP/MP/쿨타임) 는 교체 전 그대로 보존됨.
+        /// </summary>
+        public void SwitchParty()
         {
-            // 방치형 모드라면 AI를 켜고, 레이드 모드라면 수동 조작으로 설정
-            controller.EnableIdleAIMode(isIdleMode);
-        }
-    }
+            if (IsGameOver) return;
 
-    private void ClearBattlefield()
-    {
-        foreach (var chr in activeCharacters)
+            int target = (_activePartyIndex == 1) ? 2 : 1;
+
+            // 교체 대상 파티가 전멸 상태라도 교체는 허용 — 교체 후 게임오버 체크
+            ActivateParty(target, forceFirstCharacter: true);
+        }
+
+        // ──────────────────────────────────────────────
+        // 현재 파티 내 조작 캐릭터 전환 (HUD 캐릭터 교체 버튼 → 호출)
+        // ──────────────────────────────────────────────
+        /// <summary>현재 활성 파티 내에서 index 번 캐릭터에게 조작권 부여</summary>
+        public void SwitchActiveCharacter(int index)
         {
-            if (chr != null) Destroy(chr);
-        }
-        activeCharacters.Clear();
+            if (IsGameOver) return;
+            if (index < 0 || index >= ActiveParty.Count) return;
+            var target = ActiveParty[index];
+            if (target.Status.IsDead) return;
 
-        if (currentBoss != null) Destroy(currentBoss);
+            _activeCharacterIndex = index;
+            AssignPlayerControl(ActiveParty, index);
+        }
+
+        // ──────────────────────────────────────────────
+        // 게임오버 체크 (CharacterBase.Die() → 호출)
+        // ──────────────────────────────────────────────
+        /// <summary>
+        /// 활성 파티 2명 전부 사망 여부 확인.
+        /// 전멸 확인 시 ReviveService에 부활 팝업 권한 넘김 or 직접 게임오버 처리.
+        /// </summary>
+        public void CheckGameOver()
+        {
+            if (IsGameOver) return;
+
+            bool isPartyWiped = ActiveParty.All(c => c.Status.IsDead);
+            if (!isPartyWiped) return;
+
+            Debug.Log($"<color=red>[BattleManager] ‼ 파티 전멸! 보스전 실패 판정</color>");
+
+            // ReviveService가 존재하고 아직 부활권이 남아 있으면 팝업 표시
+            if (ReviveService.Instance != null && !ReviveService.Instance.HasUsedRevive)
+            {
+                Debug.Log("[BattleManager] 부활 가능 → ReviveService에 팝업 요청");
+                ReviveService.Instance.ShowRevivePopup();
+            }
+            else
+            {
+                TriggerGameOver();
+            }
+        }
+
+        /// <summary>실제 게임오버 확정 (ReviveService → 또는 부활 없이 직접 호출)</summary>
+        public void TriggerGameOver()
+        {
+            if (IsGameOver) return;
+            IsGameOver = true;
+
+            Debug.Log("<color=red>[BattleManager] 💀 GAME OVER</color>");
+
+            // CombatManager를 통한 전투 종료 처리
+            if (CombatManager.Instance != null)
+                CombatManager.Instance.EndBattle(false);
+
+            // TODO: 패배 연출 UI 활성화
+            // InGameHUDController.Instance?.ShowGameOverUI();
+        }
+
+        // ──────────────────────────────────────────────
+        // 부활 처리 (ReviveService → 호출)
+        // ──────────────────────────────────────────────
+        /// <summary>부활 승인 후 현재 파티 사망 캐릭터들 즉시 100% 부활</summary>
+        public void ExecuteRevive()
+        {
+            IsGameOver = false;
+
+            foreach (var ctrl in ActiveParty)
+            {
+                if (ctrl.Status.IsDead)
+                {
+                    ctrl.Status.ReviveToFull();
+
+                    // CharacterBase hp도 동기화
+                    var cb = ctrl.GetComponent<CharacterBase>();
+                    if (cb != null)
+                    {
+                        cb.currentHealth = cb.maxHealth;
+                    }
+
+                    ctrl.gameObject.SetActive(true);
+                    Debug.Log($"<color=cyan>[BattleManager] {ctrl.Status.characterName} 부활 완료!</color>");
+                }
+            }
+
+            // 조작 캐릭터 재지정 (첫 번째 생존자)
+            var alive = ActiveParty.FirstOrDefault(c => !c.Status.IsDead);
+            if (alive != null)
+                AssignPlayerControl(ActiveParty, ActiveParty.IndexOf(alive));
+        }
+
+        // ──────────────────────────────────────────────
+        // 정보 조회 (TagCharacterController.HealerAI 등에서 사용)
+        // ──────────────────────────────────────────────
+        /// <summary>모든 파티원(1파티 + 2파티)의 CharacterBase 목록 반환</summary>
+        public List<CharacterBase> GetAllPartyMembers()
+        {
+            var result = new List<CharacterBase>();
+            foreach (var c in Party1)
+            {
+                var cb = c.GetComponent<CharacterBase>();
+                if (cb != null) result.Add(cb);
+            }
+            foreach (var c in Party2)
+            {
+                var cb = c.GetComponent<CharacterBase>();
+                if (cb != null) result.Add(cb);
+            }
+            return result;
+        }
+
+        // ──────────────────────────────────────────────
+        // 내부 유틸리티
+        // ──────────────────────────────────────────────
+        private void ActivateParty(int partyIndex, bool forceFirstCharacter)
+        {
+            _activePartyIndex = partyIndex;
+
+            var active   = partyIndex == 1 ? Party1 : Party2;
+            var inactive = partyIndex == 1 ? Party2 : Party1;
+
+            // 1. 대기 파티 비활성화 (Status는 건드리지 않음)
+            foreach (var ctrl in inactive)
+            {
+                ctrl.SetPlayerControl(false);
+                ctrl.gameObject.SetActive(false);
+            }
+
+            // 2. 활성 파티 활성화 (생존 캐릭터만)
+            int firstAliveIndex = -1;
+            for (int i = 0; i < active.Count; i++)
+            {
+                var ctrl = active[i];
+                if (!ctrl.Status.IsDead)
+                {
+                    ctrl.gameObject.SetActive(true);
+                    // RefreshCooldownUI는 OnEnable에서 자동 호출됨
+                    if (firstAliveIndex < 0) firstAliveIndex = i;
+                }
+            }
+
+            // 3. 조작권 부여
+            if (forceFirstCharacter && firstAliveIndex >= 0)
+            {
+                _activeCharacterIndex = firstAliveIndex;
+                AssignPlayerControl(active, firstAliveIndex);
+            }
+
+            // 4. 파티 전멸 여부 즉시 체크
+            CheckGameOver();
+
+            Debug.Log($"[BattleManager] 파티{partyIndex} 태그-인 완료. 조작 캐릭터 Index={_activeCharacterIndex}");
+        }
+
+        /// <summary>partyList 중 controlledIndex 만 isPlayerControlled=true, 나머지는 false</summary>
+        private void AssignPlayerControl(List<TagCharacterController> partyList, int controlledIndex)
+        {
+            for (int i = 0; i < partyList.Count; i++)
+            {
+                bool shouldControl = (i == controlledIndex) && !partyList[i].Status.IsDead;
+                partyList[i].SetPlayerControl(shouldControl);
+                if (shouldControl)
+                    ActivePlayerCharacter = partyList[i];
+            }
+        }
     }
 }
