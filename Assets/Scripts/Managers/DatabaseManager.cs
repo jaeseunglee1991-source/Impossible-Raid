@@ -14,10 +14,10 @@ namespace BossRaid.Managers
 
         [Header("Supabase Settings")]
         [Tooltip("Supabase 프로젝트의 URL을 입력하세요.")]
-        [SerializeField] private string supabaseUrl = "여기에_Supabase_URL_입력";
+        [SerializeField] private string supabaseUrl = qycfsajwzmdsonkymobe;
         
         [Tooltip("Supabase 프로젝트의 API Keys (anon public)을 입력하세요.")]
-        [SerializeField] private string supabaseAnonKey = "여기에_Supabase_Anon_Key_입력";
+        [SerializeField] private string supabaseAnonKey = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5Y2ZzYWp3em1kc29ua3ltb2JlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MzgxMjcsImV4cCI6MjA4OTUxNDEyN30.ldEtt1eVXhHfOFSRQeK_LBM4ZG_DWmYoajBbBfImcEI;
 
         private Client _supabase;
         public Client SupabaseClient => _supabase;
