@@ -2,7 +2,7 @@ using UnityEngine;
 using System;
 using System.Threading.Tasks;
 using BossRaid.Combat;
-using BossRaid.Utils; // CurrencyFormatter용
+using BossRaid.Utils; // CurrencyFormatter용 (필요시)
 using BossRaid.UI;    // OfflineResultPopup용
 
 namespace BossRaid.Managers
@@ -26,9 +26,12 @@ namespace BossRaid.Managers
         public GrowthManager growthManager;
         public OfflineResultPopup resultPopup; // 기존에 만들어두신 결과 팝업창
 
+        // 💡 통신 딜레이/강제 종료 방지용 오프셋 변수
+        private TimeSpan timeOffset;
+
         private async void Start()
         {
-            // 매니저 연결 안 되어 있으면 찾기
+            // 매니저 및 UI 컴포넌트 연결 안 되어 있으면 씬에서 자동으로 찾기
             if (growthManager == null) growthManager = FindObjectOfType<GrowthManager>();
             if (resultPopup == null) resultPopup = FindObjectOfType<OfflineResultPopup>();
 
@@ -43,8 +46,12 @@ namespace BossRaid.Managers
             // 1. Supabase에서 '진짜 서버 시간' 가져오기 (기기 시간 조작 방어)
             DateTime currentServerTime = await GetServerTimeAsync();
 
+            // 💡 핵심 최적화: 기기 시간과 서버 시간의 오프셋(격차)을 미리 계산해 둡니다.
+            // 이를 통해 앱 종료 시 통신 없이도 정확한 서버 시간을 유추할 수 있습니다.
+            timeOffset = currentServerTime - DateTime.UtcNow;
+
             // 2. 로컬에서 AES 암호화된 '마지막 접속 시간' 가져오기
-            // (기록이 없으면 현재 시간 반환 -> 보상 없음)
+            // (기록이 없으면 현재 시간 반환 -> 첫 접속이므로 보상 없음)
             DateTime lastPlayTime = SecurePlayerPrefs.GetDateTime(LAST_PLAY_TIME_KEY, currentServerTime);
 
             // 3. 시간 차이 계산
@@ -60,16 +67,15 @@ namespace BossRaid.Managers
 
                 Debug.Log($"[OfflineReward] {rewardSeconds:F0}초 동안 미접속. 획득 골드: {earnedGold}");
                 
-                // 골드 지급 (기존 SafeDouble 변수에 추가됨)
+                // 골드 지급 (앞서 만든 SafeDouble 변수에 안전하게 추가됨)
                 if (growthManager != null)
                 {
                     growthManager.AddGold(earnedGold);
                 }
 
-                // 💡 기존 프로젝트에 있던 UI 팝업 띄우기 로직 연동
+                // 기존 프로젝트에 있던 UI 팝업 띄우기 로직 연동
                 if (resultPopup != null)
                 {
-                    // 예: "12시간 30분 동안 자리를 비우셨습니다! 150,000 골드를 획득했습니다."
                     resultPopup.ShowPopup(rewardSeconds, earnedGold); 
                 }
             }
@@ -78,35 +84,33 @@ namespace BossRaid.Managers
                 Debug.Log("[OfflineReward] 보상을 받기 위한 최소 오프라인 시간이 지나지 않았습니다.");
             }
 
-            // 5. 보상 처리가 끝난 후, 현재 서버 시간을 다시 로컬에 암호화하여 덮어씌움
-            SecurePlayerPrefs.SetDateTime(LAST_PLAY_TIME_KEY, currentServerTime);
+            // 5. 보상 처리가 끝난 후, 계산된 현재 시간을 다시 로컬에 암호화하여 덮어씌움
+            SaveEstimatedServerTime();
         }
 
-        // 앱이 일시정지(백그라운드)되거나 다시 켜질 때
-        private async void OnApplicationPause(bool isPaused)
+        // 스마트폰에서 홈 버튼을 눌러 앱이 백그라운드로 내려가거나 다시 켜질 때
+        private void OnApplicationPause(bool isPaused)
         {
             if (isPaused) 
             {
-                await SaveCurrentTime();
-            }
-            else
-            {
-                // 백그라운드에서 다시 돌아왔을 때 보상 재계산 로직이 필요하다면 여기에 추가
+                // 앱이 내려갈 때 비동기 통신 없이 즉시 저장! (저장 증발 버그 완벽 차단)
+                SaveEstimatedServerTime();
             }
         }
 
-        // 앱이 완전히 종료될 때
-        private async void OnApplicationQuit()
+        // PC에서 창을 닫거나 안드로이드에서 앱을 강제 종료(Kill) 할 때
+        private void OnApplicationQuit()
         {
-            await SaveCurrentTime();
+            // 통신 없이 즉시 저장!
+            SaveEstimatedServerTime();
         }
 
-        // 서버 시간을 불러와 안전하게 저장하는 공통 함수
-        private async Task SaveCurrentTime()
+        // 💡 오프셋을 활용하여 서버 통신 없이 예상 서버 시간을 안전하고 빠르게 저장하는 함수
+        private void SaveEstimatedServerTime()
         {
-            DateTime currentServerTime = await GetServerTimeAsync();
-            SecurePlayerPrefs.SetDateTime(LAST_PLAY_TIME_KEY, currentServerTime);
-            Debug.Log("[OfflineReward] 게임 종료/일시정지: 현재 서버 시간을 안전하게 저장했습니다.");
+            DateTime estimatedServerTime = DateTime.UtcNow + timeOffset;
+            SecurePlayerPrefs.SetDateTime(LAST_PLAY_TIME_KEY, estimatedServerTime);
+            Debug.Log("[OfflineReward] 게임 종료/일시정지: 예상 서버 시간을 안전하게 저장했습니다.");
         }
 
         // Supabase RPC 호출 로직 (서버 시간 가져오기)
@@ -114,10 +118,14 @@ namespace BossRaid.Managers
         {
             try
             {
-                // 🚨 SQL에서 "_v2"를 붙였다면 "get_server_time_v2"로 변경
-                var response = await SupabaseManager.Instance.client.Rpc("get_server_time_v2", null);
+                // 🚨 SQL에서 기존 함수를 DROP하고 새로 만들었다면 "get_server_time" 그대로 사용
+                // "_v2"를 붙여서 생성하셨다면 "get_server_time_v2"로 변경하세요.
+                var response = await SupabaseManager.Instance.client.Rpc("get_server_time", null);
                 
-                if (DateTime.TryParse(response.Content, out DateTime serverTime))
+                // 🪲 버그 수정: Supabase JSON 반환값의 쌍따옴표(") 제거
+                string cleanTimeStr = response.Content.Trim('"'); 
+                
+                if (DateTime.TryParse(cleanTimeStr, out DateTime serverTime))
                 {
                     return serverTime;
                 }
