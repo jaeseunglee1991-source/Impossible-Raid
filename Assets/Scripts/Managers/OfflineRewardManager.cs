@@ -115,7 +115,7 @@ namespace BossRaid.Managers
             try
             {
                 // 🚨 SQL에서 "_v2"를 붙였다면 "get_server_time_v2"로 변경
-                var response = await SupabaseManager.Instance.client.Rpc("get_server_time", null);
+                var response = await SupabaseManager.Instance.client.Rpc("get_server_time_v2", null);
                 
                 if (DateTime.TryParse(response.Content, out DateTime serverTime))
                 {
