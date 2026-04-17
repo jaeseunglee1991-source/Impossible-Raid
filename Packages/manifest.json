@@ -10,6 +10,7 @@
     }
   ],
   "dependencies": {
+    "com.unity.ads": "4.4.2",
     "com.cysharp.unitask": "2.5.10",
     "com.github-glitchenzo.nugetforunity": "4.1.1",
     "com.unity.collab-proxy": "2.11.4",

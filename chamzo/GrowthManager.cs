@@ -66,7 +66,7 @@ namespace BossRaid.Managers
                 };
 
                 // 1. 서버에 보스 처치 사실을 알림
-                var response = await DatabaseManager.Instance.SupabaseClient.Rpc("claim_boss_reward", parameters);
+                var response = await Supabase.Client.Instance.Rpc("claim_boss_reward", parameters);
 
                 // 2. 서버가 계산을 마치고 돌려준 '진짜 골드량'을 받아옴
                 if (response != null && !string.IsNullOrEmpty(response.Content))

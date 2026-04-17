@@ -76,7 +76,7 @@ namespace BossRaid.Managers
                 // 기존 프로젝트에 있던 UI 팝업 띄우기 로직 연동
                 if (resultPopup != null)
                 {
-                    resultPopup.ShowPopup(rewardSeconds, earnedGold); 
+                    resultPopup.Show(System.TimeSpan.FromSeconds(rewardSeconds), earnedGold); 
                 }
             }
             else
@@ -120,7 +120,7 @@ namespace BossRaid.Managers
             {
                 // 🚨 SQL에서 기존 함수를 DROP하고 새로 만들었다면 "get_server_time" 그대로 사용
                 // "_v2"를 붙여서 생성하셨다면 "get_server_time_v2"로 변경하세요.
-                var response = await SupabaseManager.Instance.client.Rpc("get_server_time", null);
+                var response = await DatabaseManager.Instance.SupabaseClient.Rpc("get_server_time", null);
                 
                 // 🪲 버그 수정: Supabase JSON 반환값의 쌍따옴표(") 제거
                 string cleanTimeStr = response.Content.Trim('"'); 

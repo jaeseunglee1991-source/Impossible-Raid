@@ -187,7 +187,7 @@ namespace BossRaid.UI
 
             try
             {
-                var client = DatabaseManager.Instance.Client;
+                var client = DatabaseManager.Instance.SupabaseClient;
                 _lobbyChannel = client.Realtime.Channel("lobby-community");
 
                 // [주의] 현재 프로젝트의 Supabase SDK 버전 문제로 Broadcast/Presence 기능이 컴파일 오류를 일으켜 임시 주석 처리합니다.

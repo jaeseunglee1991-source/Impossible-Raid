@@ -33,7 +33,7 @@ namespace BossRaid.Managers
         public async Task JoinRoom(string roomId)
         {
             currentRoomId = roomId;
-            roomChannel = DatabaseManager.Instance.Client.Realtime.Channel($"room-{roomId}");
+            roomChannel = DatabaseManager.Instance.SupabaseClient.Realtime.Channel($"room-{roomId}");
             
             roomChannel.AddPostgresChangeHandler(PostgresChangesOptions.ListenType.All, (s, c) => {
                 _ = RefreshRoomState();
@@ -47,7 +47,7 @@ namespace BossRaid.Managers
         {
             try
             {
-                var response = await DatabaseManager.Instance.Client.From<RoomData>()
+                var response = await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, currentRoomId)
                     .Get();
                 
@@ -62,7 +62,7 @@ namespace BossRaid.Managers
                     }
 
                     // 만약 내가 강퇴당했거나 방이 사라졌다면?
-                    var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+                    var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
                     if (!participants.Any(p => p.id == myId))
                     {
                         Debug.LogWarning("[WaitingRoom] You are no longer in this room.");
@@ -81,7 +81,7 @@ namespace BossRaid.Managers
             try
             {
                 var json = JsonConvert.SerializeObject(participants);
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.participants, json)
                     .Update();
@@ -95,7 +95,7 @@ namespace BossRaid.Managers
 
         public async Task<bool> SelectJob(string jobName)
         {
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             var me = participants.FirstOrDefault(p => p.id == myId);
             if (me == null) return false;
 
@@ -118,7 +118,7 @@ namespace BossRaid.Managers
 
         public async Task ToggleReady()
         {
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             var me = participants.FirstOrDefault(p => p.id == myId);
             if (me == null || me.isHost) return;
 
@@ -169,7 +169,7 @@ namespace BossRaid.Managers
                 bannedList.Add(targetUserId);
                 var bannedJson = JsonConvert.SerializeObject(bannedList);
                 
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.banned_user_ids, bannedJson)
                     .Set(x => x.participants, JsonConvert.SerializeObject(participants))
@@ -179,13 +179,13 @@ namespace BossRaid.Managers
 
         public bool IsHost()
         {
-            if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null || DatabaseManager.Instance.Client.Auth.CurrentUser == null)
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null || DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser == null)
             {
                 // 테스트 모드나 비로그인 상태일 경우: 참가자 리스트의 첫 번째 플레이어 설정값을 따름
                 if (participants != null && participants.Count > 0) return participants[0].isHost;
                 return false;
             }
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             return participants.Any(p => p.id == myId && p.isHost);
         }
 
@@ -224,7 +224,7 @@ namespace BossRaid.Managers
             try
             {
                 Debug.Log($"[WaitingRoom] Attempting to update DB status to 'playing' for room: {currentRoomId}");
-                var response = await DatabaseManager.Instance.Client.From<RoomData>()
+                var response = await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.status, "playing")
                     .Set(x => x.participants, JsonConvert.SerializeObject(participants))
@@ -256,7 +256,7 @@ namespace BossRaid.Managers
                 // 전원 Ready 해제 (상태 초기화)
                 foreach (var p in participants) p.isReady = false;
                 
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.status, "rematch")
                     .Set(x => x.participants, JsonConvert.SerializeObject(participants))
@@ -274,7 +274,7 @@ namespace BossRaid.Managers
 
         public async Task AcceptRematch()
         {
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             var me = participants.FirstOrDefault(p => p.id == myId);
             if (me == null) return;
 
@@ -298,7 +298,7 @@ namespace BossRaid.Managers
             Debug.Log("[WaitingRoom] Rule 4-1-2: Rematch declined. Disbanding party to Lobby.");
             try
             {
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.status, "lobby")
                     .Update();
@@ -318,7 +318,7 @@ namespace BossRaid.Managers
             try
             {
                 Debug.Log("[WaitingRoom] Updating status to 'waiting'...");
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == currentRoomId)
                     .Set(x => x.status, "waiting")
                     .Update();

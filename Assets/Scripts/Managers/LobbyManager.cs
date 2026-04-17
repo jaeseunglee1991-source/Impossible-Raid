@@ -24,7 +24,7 @@ namespace BossRaid.Managers
         {
             try
             {
-                var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+                var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
                 var myNickname = AuthManager.Instance.LocalUser.nickname;
                 var initialParticipants = new List<RoomMember> { new RoomMember(myId, myNickname, true) };
 
@@ -38,7 +38,7 @@ namespace BossRaid.Managers
                     participants = JsonConvert.SerializeObject(initialParticipants)
                 };
 
-                var response = await DatabaseManager.Instance.Client.From<RoomData>().Insert(newRoom);
+                var response = await DatabaseManager.Instance.SupabaseClient.From<RoomData>().Insert(newRoom);
                 if (response.Models.Count > 0)
                 {
                     Debug.Log($"[LobbyManager] Room '{title}' created with ID: {response.Models[0].id}");
@@ -57,13 +57,13 @@ namespace BossRaid.Managers
         {
             try
             {
-                if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null)
+                if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
                 {
                     Debug.LogWarning("[LobbyManager] Client not initialized yet.");
                     return new List<RoomData>();
                 }
 
-                var query = DatabaseManager.Instance.Client.From<RoomData>();
+                var query = DatabaseManager.Instance.SupabaseClient.From<RoomData>();
                 if (query == null) return new List<RoomData>();
 
                 Debug.Log("[LobbyManager] Starting GetRoomList query...");
@@ -102,7 +102,7 @@ namespace BossRaid.Managers
         {
             try
             {
-                var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+                var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
                 var myNickname = AuthManager.Instance.LocalUser.nickname;
 
                 // 1. 차단 여부 확인
@@ -132,7 +132,7 @@ namespace BossRaid.Managers
                 participants.Add(new RoomMember(myId, myNickname, false));
                 var json = JsonConvert.SerializeObject(participants);
 
-                await DatabaseManager.Instance.Client.From<RoomData>()
+                await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                     .Where(x => x.id == room.id)
                     .Set(x => x.participants, json)
                     .Update();

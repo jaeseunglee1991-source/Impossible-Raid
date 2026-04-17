@@ -348,13 +348,13 @@ namespace BossRaid.Combat
             IsPartyWiping = false;
         }
 
-        private void ReviveAllPlayers()
+        public void ReviveAllPlayers()
         {
             foreach (var player in activePlayers)
             {
                 if (player.IsDead)
                 {
-                    player.currentHealth = player.maxHealth * 0.5f; // 50% 체력 부활
+                    player.Revive(0.5f); // 50% 체력 부활
                     Debug.Log($"[Combat] {player.characterName} 부활! (HP: {player.currentHealth})");
                 }
             }

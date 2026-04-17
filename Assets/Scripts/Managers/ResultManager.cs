@@ -67,14 +67,14 @@ namespace BossRaid.Managers
         {
             try
             {
-                if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null || DatabaseManager.Instance.Client.Auth.CurrentUser == null)
+                if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null || DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser == null)
                 {
                     Debug.LogWarning("[ResultManager] DB Sync Skipped: No user is currently logged in.");
                     return;
                 }
 
                 // 실제 Supabase 업데이트 로직 (간소화)
-                var userId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+                var userId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
                 Debug.Log($"[ResultManager] DB Update: isWin={isWin}, stage={stageCleared}");
                 
                 // 실제 연동 로직은 프로젝트 스펙에 맞춰 구현 (Skip here for clarity)

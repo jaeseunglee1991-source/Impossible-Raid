@@ -50,6 +50,10 @@ namespace BossRaid.UI
         public Button giveUpConfirmButton;
         public Button giveUpCancelButton;
 
+        [Header("Player HP (로컬 플레이어)")]
+        public Image playerHpFill;
+        public TextMeshProUGUI playerHpText;
+
         [Header("Game State")]
         public CharacterBase localPlayer;
         public BossAI currentBoss;
@@ -298,6 +302,14 @@ namespace BossRaid.UI
         {
             if (lifeText != null)
                 lifeText.text = $"LIFE: {currentLives}/{maxLives}";
+        }
+
+        public void UpdateLocalPlayerHP(float currentHealth, float maxHealth)
+        {
+            if (playerHpFill != null)
+                playerHpFill.fillAmount = currentHealth / maxHealth;
+            if (playerHpText != null)
+                playerHpText.text = $"{currentHealth:F0} / {maxHealth:F0}";
         }
 
         /// <summary>보스 캐스팅 시작 (외부에서 호출)</summary>

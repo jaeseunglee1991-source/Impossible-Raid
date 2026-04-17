@@ -57,16 +57,18 @@ public class IdleRaidSceneSetup : EditorWindow
         var battleManager = Object.FindFirstObjectByType<BattleManager>();
         if (battleManager != null)
         {
-            battleManager.Party1.Clear();
-            battleManager.Party2.Clear();
+            battleManager.ActiveCharacters.Clear();
 
-            // 파티 1: 전사(탱커) + 힐러(지원)
-            battleManager.Party1.Add(warriorObj.GetComponent<TagCharacterController>());
-            battleManager.Party1.Add(healerObj.GetComponent<TagCharacterController>());
+            // 파티에 캐릭터 할당
+            var w = warriorObj.GetComponent<TagCharacterController>();
+            var h = healerObj.GetComponent<TagCharacterController>();
+            var r = rogueObj.GetComponent<TagCharacterController>();
+            var m = mageObj.GetComponent<TagCharacterController>();
 
-            // 파티 2: 도적(근접딜) + 마법사(원거리딜)
-            battleManager.Party2.Add(rogueObj.GetComponent<TagCharacterController>());
-            battleManager.Party2.Add(mageObj.GetComponent<TagCharacterController>());
+            if (w != null) battleManager.ActiveCharacters.Add(w);
+            if (h != null) battleManager.ActiveCharacters.Add(h);
+            if (r != null) battleManager.ActiveCharacters.Add(r);
+            if (m != null) battleManager.ActiveCharacters.Add(m);
 
             EditorUtility.SetDirty(battleManager);
         }

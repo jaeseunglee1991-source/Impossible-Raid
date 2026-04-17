@@ -126,12 +126,14 @@ namespace BossRaid.Combat
             // 스킬 1 사용 (예: Q 키)
             if (Input.GetKeyDown(KeyCode.Q))
             {
-                characterBase.UseSkill(0, currentBoss);
+                characterBase.targetBoss = currentBoss;
+                characterBase.UseSkill(0);
             }
             // 스킬 2 사용 (예: E 키)
             else if (Input.GetKeyDown(KeyCode.E))
             {
-                characterBase.UseSkill(1, currentBoss);
+                characterBase.targetBoss = currentBoss;
+                characterBase.UseSkill(1);
             }
         }
 
@@ -212,7 +214,7 @@ namespace BossRaid.Combat
                     characterBase.PlayAnimation("Attack"); // SPUM 등의 공격 애니메이션 호출
                     
                     // 보스에게 데미지 적용
-                    currentBoss.TakeDamage(characterBase.baseAttackPower);
+                    characterBase.DealDamageTo(currentBoss, characterBase.baseAttackPower);
                     
                     lastAIAttackTime = Time.time;
                 }

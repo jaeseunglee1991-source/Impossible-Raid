@@ -56,6 +56,23 @@ namespace BossRaid.Managers
         {
             if (Instance != null && Instance != this) { Destroy(gameObject); return; }
             Instance = this;
+
+            FixInputSystemError();
+        }
+
+        private void FixInputSystemError()
+        {
+            var eventSystem = FindFirstObjectByType<UnityEngine.EventSystems.EventSystem>();
+            if (eventSystem != null)
+            {
+                var oldModule = eventSystem.GetComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+                if (oldModule != null)
+                {
+                    DestroyImmediate(oldModule);
+                    eventSystem.gameObject.AddComponent<UnityEngine.InputSystem.UI.InputSystemUIInputModule>();
+                    Debug.Log("<color=green>[Fix] Replaced StandaloneInputModule with InputSystemUIInputModule to resolve Input System conflict.</color>");
+                }
+            }
         }
 
         // ──────────────────────────────────────────────
@@ -77,7 +94,7 @@ namespace BossRaid.Managers
             if (HasUsedRevive)
             {
                 Debug.LogWarning("[ReviveService] 이미 부활권을 사용했습니다.");
-                BattleManager.Instance.TriggerGameOver();
+                BattleManager.Instance.CheckGameOver();
                 return;
             }
 
@@ -122,7 +139,7 @@ namespace BossRaid.Managers
                 Debug.LogWarning("[ReviveService] ❌ 트랜잭션 실패 (재화 부족 또는 통신 오류)");
                 // TODO: 실패 메시지 UI (상점 이동 버튼 등)
                 // InGameHUDController.Instance?.ShowReviveFailPopup();
-                BattleManager.Instance.TriggerGameOver();
+                BattleManager.Instance.CheckGameOver();
             }
         }
 
@@ -130,7 +147,7 @@ namespace BossRaid.Managers
         public void OnReviveDeclined()
         {
             Debug.Log("[ReviveService] 플레이어가 부활을 거절했습니다. 게임오버 처리.");
-            BattleManager.Instance.TriggerGameOver();
+            BattleManager.Instance.CheckGameOver();
         }
 
         // ──────────────────────────────────────────────
@@ -146,27 +163,33 @@ namespace BossRaid.Managers
         {
             try
             {
-                // ── Supabase C# SDK 사용 예시 (패키지 설치 후 주석 해제) ──
-                //
-                // var payload = new ReviveRpcPayload
-                // {
-                //     user_id     = AuthManager.Instance.CurrentUserId,
-                //     cost_amount = reviveCost
-                // };
-                //
-                // var response = await SupabaseManager.Client
-                //     .Rpc(rpcFunctionName, payload);
-                //
-                // if (response.ResponseMessage?.IsSuccessStatusCode == true)
-                // {
-                //     var result = JsonUtility.FromJson<ReviveRpcResult>(response.Content);
-                //     return result.success;
-                // }
-                // return false;
+                if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
+                {
+                    Debug.LogError("[ReviveService] DatabaseManager is not initialized.");
+                    return false;
+                }
 
-                // ── Fallback: UnityWebRequest (SDK 없을 경우) ──
-                bool result = await CallReviveRpcViaWebRequest();
-                return result;
+                if (AuthManager.Instance == null || AuthManager.Instance.LocalUser == null)
+                {
+                    Debug.LogError("[ReviveService] User is not logged in.");
+                    return false;
+                }
+
+                var payload = new System.Collections.Generic.Dictionary<string, object>
+                {
+                    { "p_user_id", AuthManager.Instance.LocalUser.id },
+                    { "p_cost", reviveCost }
+                };
+
+                var response = await DatabaseManager.Instance.SupabaseClient.Rpc(rpcFunctionName, payload);
+
+                if (response != null && !string.IsNullOrEmpty(response.Content))
+                {
+                    var result = JsonUtility.FromJson<ReviveRpcResult>(response.Content);
+                    return result.success;
+                }
+                
+                return false;
             }
             catch (Exception ex)
             {
@@ -230,7 +253,7 @@ namespace BossRaid.Managers
             if (BattleManager.Instance == null) return;
 
             // BattleManager에 위임: 활성 파티 사망 캐릭터들 HP/MP 100% 복구
-            BattleManager.Instance.ExecuteRevive();
+            if(BossRaid.Combat.CombatManager.Instance != null) BossRaid.Combat.CombatManager.Instance.ReviveAllPlayers();
 
             Debug.Log("<color=cyan>[ReviveService] ✅ 부활 완료! 전투 속행.</color>");
 

@@ -179,7 +179,7 @@ namespace BossRaid.UI
             bool isHost = mgr.IsHost();
             readyButton.gameObject.SetActive(!isHost);
             
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             var me = mgr.participants.FirstOrDefault(p => p.id == myId);
             if (me != null && !isHost)
             {
@@ -236,7 +236,7 @@ namespace BossRaid.UI
             var mgr = WaitingRoomManager.Instance;
             if (mgr == null || mgr.currentRoomData == null) return;
             
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             var me = mgr.participants.FirstOrDefault(p => p.id == myId);
             
             if (me != null)
@@ -261,7 +261,7 @@ namespace BossRaid.UI
 
         private void OnPlayerClicked(RoomMember member)
         {
-            var myId = DatabaseManager.Instance.Client.Auth.CurrentUser.Id;
+            var myId = DatabaseManager.Instance.SupabaseClient.Auth.CurrentUser.Id;
             if (WaitingRoomManager.Instance.IsHost() && member.id != myId)
             {
                 // 호스트 메뉴 팝업 (Kick/Warn/Ban)

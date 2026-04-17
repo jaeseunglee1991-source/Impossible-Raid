@@ -74,7 +74,7 @@ namespace BossRaid.Managers
 
             try
             {
-                var response = await _supabase.From<UserRecord>().Where(x => x.UserId == userId).Single();
+                var response = await _supabase.From<UserRecord>().Where(x => x.id == userId).Single();
                 return response;
             }
             catch (Exception ex)
@@ -116,7 +116,7 @@ namespace BossRaid.Managers
 
             try
             {
-                var response = await _supabase.From<RoomData>().Where(x => x.IsActive == true).Get();
+                var response = await _supabase.From<RoomData>().Where(x => x.status == "active").Get();
                 return response.Models;
             }
             catch (Exception ex)
@@ -136,7 +136,7 @@ namespace BossRaid.Managers
             try
             {
                 await _supabase.From<RoomData>().Insert(newRoom);
-                Debug.Log($"[DatabaseManager] '{newRoom.RoomName}' 방 생성 완료");
+                Debug.Log($"[DatabaseManager] '{newRoom.title}' 방 생성 완료");
                 return true;
             }
             catch (Exception ex)
@@ -174,7 +174,7 @@ namespace BossRaid.Managers
 
             try
             {
-                await _supabase.From<RoomData>().Where(x => x.Id == roomId).Delete();
+                await _supabase.From<RoomData>().Where(x => x.id == roomId).Delete();
                 Debug.Log($"[DatabaseManager] 방 삭제 완료 (ID: {roomId})");
                 return true;
             }

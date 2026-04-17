@@ -32,7 +32,7 @@ namespace BossRaid.UI
             foreach (Transform child in historyContainer) Destroy(child.gameObject);
 
             // Supabase에서 유저의 과거 전적 조회 (rooms 테이블에서 participants에 해당 유저가 포함된 'finished' 상태의 방들)
-            var response = await DatabaseManager.Instance.Client.From<RoomData>()
+            var response = await DatabaseManager.Instance.SupabaseClient.From<RoomData>()
                 .Filter("status", Supabase.Postgrest.Constants.Operator.Equals, "finished")
                 .Get();
 

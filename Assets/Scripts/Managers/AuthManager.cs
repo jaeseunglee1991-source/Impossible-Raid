@@ -29,7 +29,7 @@ namespace BossRaid.Managers
         public async Task<bool> SignUp(string email, string password, string nickname)
         {
             // DatabaseManager 초기화 체크
-            if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null)
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
             {
                 LastError = "데이터베이스 연결이 초기화되지 않았습니다.\n씬에 DatabaseManager가 있는지 확인해 주세요.";
                 Debug.LogError("[AuthManager] DatabaseManager is not initialized.");
@@ -39,7 +39,7 @@ namespace BossRaid.Managers
             try
             {
                 string hashedPassword = HashPassword(password);
-                var session = await DatabaseManager.Instance.Client.Auth.SignUp(email, hashedPassword);
+                var session = await DatabaseManager.Instance.SupabaseClient.Auth.SignUp(email, hashedPassword);
                 
                 if (session != null && session.User != null)
                 {
@@ -52,7 +52,7 @@ namespace BossRaid.Managers
                         max_stage_reached = 0
                     };
 
-                    await DatabaseManager.Instance.Client.From<UserRecord>().Insert(profile);
+                    await DatabaseManager.Instance.SupabaseClient.From<UserRecord>().Insert(profile);
                     Debug.Log($"[AuthManager] Profile created for {nickname}");
                     return true;
                 }
@@ -78,7 +78,7 @@ namespace BossRaid.Managers
             LastError = string.Empty;
 
             // DatabaseManager 초기화 체크
-            if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null)
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
             {
                 LastError = "데이터베이스 연결이 초기화되지 않았습니다.\n씬에 DatabaseManager가 있는지 확인해 주세요.";
                 Debug.LogError("[AuthManager] DatabaseManager is not initialized.");
@@ -96,11 +96,11 @@ namespace BossRaid.Managers
             try
             {
                 string hashedPassword = HashPassword(password);
-                var session = await DatabaseManager.Instance.Client.Auth.SignIn(email, hashedPassword);
+                var session = await DatabaseManager.Instance.SupabaseClient.Auth.SignIn(email, hashedPassword);
                 
                 if (session != null && session.User != null)
                 {
-                    var response = await DatabaseManager.Instance.Client.From<UserRecord>()
+                    var response = await DatabaseManager.Instance.SupabaseClient.From<UserRecord>()
                         .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, session.User.Id)
                         .Get();
 
@@ -131,37 +131,52 @@ namespace BossRaid.Managers
         public async Task<bool> SignInAsGuest()
         {
             LastError = string.Empty;
-            if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null)
+            if (DatabaseManager.Instance == null || !DatabaseManager.Instance.IsInitialized)
             {
-                LastError = "데이터베이스 연결이 초기화되지 않았습니다.";
+                LastError = "데이터베이스 연결이 초기화되지 않았습니다. 인터넷 상태를 확인하거나 잠시 후 다시 시도해 주세요.";
+                Debug.LogError("[AuthManager] DatabaseManager is not initialized or failed to connect.");
                 return false;
             }
 
             try
             {
-                var session = await DatabaseManager.Instance.Client.Auth.SignInAnonymously();
+                Debug.Log("[AuthManager] Attempting Guest Login...");
+                var session = await DatabaseManager.Instance.SupabaseClient.Auth.SignInAnonymously();
+                
                 if (session != null && session.User != null)
                 {
+                    Debug.Log($"[AuthManager] Guest Login Successful. UserID: {session.User.Id}");
                     return await EnsureUserProfile(session.User.Id, "Guest Player");
                 }
+                
+                LastError = "게스트 로그인 세션을 생성하지 못했습니다.";
+                return false;
             }
             catch (Exception ex)
             {
                 string msg = ex.Message.ToLower();
-                if (msg.Contains("anonymous_provider_disabled"))
-                    LastError = "Supabase 설정에서 'Anonymous Sign-ins'를 활성화해야 합니다.\n(Authentication -> Providers -> Anonymous)";
+                if (msg.Contains("anonymous_provider_disabled") || msg.Contains("400"))
+                {
+                    LastError = "서버 설정에서 게스트 로그인이 활성화되지 않았습니다. (Anonymous Sign-ins: Disabled)";
+                }
+                else if (msg.Contains("timeout") || msg.Contains("network"))
+                {
+                    LastError = "인터넷 연결이 불안정하여 게스트 로그인에 실패했습니다.";
+                }
                 else
-                    LastError = "게스트 로그인 실패. 다시 시도해 주세요.";
+                {
+                    LastError = "게스트 로그인 중 오류가 발생했습니다. 다시 시도해 주세요.";
+                }
                 
-                Debug.LogError($"[AuthManager] Guest login failed: {ex.Message}");
+                Debug.LogError($"[AuthManager] Guest login failed: {ex.Message}\n{ex.StackTrace}");
+                return false;
             }
-            return false;
         }
 
         public async Task<bool> SignInWithGoogle()
         {
             LastError = string.Empty;
-            if (DatabaseManager.Instance == null || DatabaseManager.Instance.Client == null)
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
             {
                 LastError = "데이터베이스 연결이 초기화되지 않았습니다.";
                 return false;
@@ -171,7 +186,7 @@ namespace BossRaid.Managers
             {
                 // Supabase.Gotrue.Provider.Google (혹은 라이브러리 버전에 따라 다른 위치)
                 // 이 방식은 웹 브라우저를 엽니다. Native SDK 연동 시에는 별도 처리가 필요합니다.
-                await DatabaseManager.Instance.Client.Auth.SignIn(Supabase.Gotrue.Constants.Provider.Google);
+                await DatabaseManager.Instance.SupabaseClient.Auth.SignIn(Supabase.Gotrue.Constants.Provider.Google);
                 
                 // OAuth의 경우 리다이렉트 처리 후 세션이 유효해지면 호출됩니다.
                 // 여기서는 리턴 true를 하지만, 실제 데이터 로드는 온보딩/리다이렉트 처리부에서 수행해야 할 수도 있습니다.
@@ -189,7 +204,7 @@ namespace BossRaid.Managers
         {
             try
             {
-                var response = await DatabaseManager.Instance.Client.From<UserRecord>()
+                var response = await DatabaseManager.Instance.SupabaseClient.From<UserRecord>()
                     .Filter("id", Supabase.Postgrest.Constants.Operator.Equals, userId)
                     .Get();
 
@@ -211,7 +226,7 @@ namespace BossRaid.Managers
                         max_stage_reached = 0
                     };
 
-                    await DatabaseManager.Instance.Client.From<UserRecord>().Insert(newProfile);
+                    await DatabaseManager.Instance.SupabaseClient.From<UserRecord>().Insert(newProfile);
                     LocalUser = newProfile;
                     Debug.Log($"[AuthManager] New profile created: {newProfile.nickname}");
                     return true;

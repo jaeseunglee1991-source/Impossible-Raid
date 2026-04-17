@@ -198,7 +198,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -417,6 +417,41 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 81164198}
   m_CullTransparentMesh: 1
+--- !u!1 &180247242
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 180247243}
+  m_Layer: 0
+  m_Name: SpwanPoint
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &180247243
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 180247242}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 621160406}
+  - {fileID: 1570131624}
+  - {fileID: 1920348088}
+  - {fileID: 1353284393}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &245067177
 GameObject:
   m_ObjectHideFlags: 0
@@ -453,7 +488,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 5}
   m_SizeDelta: {x: 240, y: 70}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &245067179
@@ -615,7 +650,7 @@ Canvas:
   m_OverridePixelPerfect: 0
   m_SortingBucketNormalizedSize: 0
   m_VertexColorAlwaysGammaSpace: 0
-  m_AdditionalShaderChannelsFlag: 0
+  m_AdditionalShaderChannelsFlag: 25
   m_UpdateRectTransformForStandalone: 0
   m_SortingLayerID: 0
   m_SortingOrder: 0
@@ -709,7 +744,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4278512639
   m_fontColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -722,7 +757,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -814,7 +849,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -250, y: -45}
+  m_AnchoredPosition: {x: -402, y: 5}
   m_SizeDelta: {x: 400, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &539934628
@@ -846,7 +881,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4278512639
   m_fontColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -859,7 +894,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -962,16 +997,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
   isPlayerControlled: 0
-  Status:
-    characterName: 
-    role: 0
-    MaxHP: 1000
-    CurrentHP: 0
-    MaxMP: 100
-    CurrentMP: 0
-    Skill1MaxCooldown: 8
-    Skill2MaxCooldown: 20
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!114 &549675396
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -986,17 +1018,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.Classes.Mage
   characterName: 
   role: 0
-  maxHealth: 1000
-  currentHealth: 0
-  movementSpeed: 5
-  attackRange: 2
-  attackSpeed: 1
   autoAttackDamage: 30
-  currentThreat: 0
-  totalDamageDealt: 0
-  totalHealingDone: 0
-  totalDamageTaken: 0
-  aggroDuration: 0
+  attackSpeed: 1
+  attackRange: 2
+  baseAttackCooldown: 1
   skillNames:
   - 
   - 
@@ -1005,17 +1030,29 @@ MonoBehaviour:
   - 0
   - 0
   - 0
-  skillCurrentCD:
-  - 0
-  - 0
-  - 0
   ultimateName: 
   ultimateCooldown: 60
-  ultimateCurrentCD: 0
+  targetBoss: {fileID: 0}
   shieldAmount: 0
   damageReductionMultiplier: 1
   attackPowerMultiplier: 1
-  isInvulnerable: 0
+  movementSpeed: 5
+  maxHealth: 1000
+  _currentHealth: 0
+  _isInvulnerable: 0
+  currentThreat: 0
+  threatMultiplier: 1
+  aggroDuration: 0
+  totalDamageDealt: 0
+  totalHealingDone: 0
+  totalDamageTaken: 0
+  attackPowerUpgrade:
+    statName: "\uAE30\uBCF8 \uACF5\uACA9\uB825"
+    currentLevel: 1
+    baseCost: 10
+    costMultiplier: 1.15
+    baseStat: 15
+    statIncreasePerLevel: 3
 --- !u!1 &597056163
 GameObject:
   m_ObjectHideFlags: 0
@@ -1216,7 +1253,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -1274,6 +1311,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 620397284}
   m_CullTransparentMesh: 1
+--- !u!1 &621160405
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 621160406}
+  m_Layer: 0
+  m_Name: Player_Warrior
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &621160406
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 621160405}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1320, y: 488, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 180247243}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &727809440
 GameObject:
   m_ObjectHideFlags: 0
@@ -1353,7 +1421,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -1490,7 +1558,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -1593,16 +1661,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
   isPlayerControlled: 0
-  Status:
-    characterName: 
-    role: 0
-    MaxHP: 1000
-    CurrentHP: 0
-    MaxMP: 100
-    CurrentMP: 0
-    Skill1MaxCooldown: 8
-    Skill2MaxCooldown: 20
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!114 &842741537
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1617,17 +1682,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.Classes.Rogue
   characterName: 
   role: 0
-  maxHealth: 1000
-  currentHealth: 0
-  movementSpeed: 5
-  attackRange: 2
-  attackSpeed: 1
   autoAttackDamage: 30
-  currentThreat: 0
-  totalDamageDealt: 0
-  totalHealingDone: 0
-  totalDamageTaken: 0
-  aggroDuration: 0
+  attackSpeed: 1
+  attackRange: 2
+  baseAttackCooldown: 1
   skillNames:
   - 
   - 
@@ -1636,17 +1694,29 @@ MonoBehaviour:
   - 0
   - 0
   - 0
-  skillCurrentCD:
-  - 0
-  - 0
-  - 0
   ultimateName: 
   ultimateCooldown: 60
-  ultimateCurrentCD: 0
+  targetBoss: {fileID: 0}
   shieldAmount: 0
   damageReductionMultiplier: 1
   attackPowerMultiplier: 1
-  isInvulnerable: 0
+  movementSpeed: 5
+  maxHealth: 1000
+  _currentHealth: 0
+  _isInvulnerable: 0
+  currentThreat: 0
+  threatMultiplier: 1
+  aggroDuration: 0
+  totalDamageDealt: 0
+  totalHealingDone: 0
+  totalDamageTaken: 0
+  attackPowerUpgrade:
+    statName: "\uAE30\uBCF8 \uACF5\uACA9\uB825"
+    currentLevel: 1
+    baseCost: 10
+    costMultiplier: 1.15
+    baseStat: 15
+    statIncreasePerLevel: 3
 --- !u!1 &876976294
 GameObject:
   m_ObjectHideFlags: 0
@@ -1695,14 +1765,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 1f364434f5a3f5d4f8c6fbf613b58e53, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Managers.BattleManager
-  Party1:
-  - {fileID: 1801152027}
-  - {fileID: 1825203596}
-  Party2:
-  - {fileID: 842741536}
-  - {fileID: 549675395}
-  _activePartyIndex: 1
-  _activeCharacterIndex: 0
+  isIdleFarmingMode: 1
+  warriorPrefab: {fileID: 335157432040715575, guid: 29a9bea320db74862816289bc063641d, type: 3}
+  roguePrefab: {fileID: 1382782348239096657, guid: 6c4d025f7cfa84371b946fd4062d48a9, type: 3}
+  magePrefab: {fileID: 3222167648754355912, guid: 6a1158b8c77e74152951cddb6f1d77de, type: 3}
+  healerPrefab: {fileID: 8215520666455406396, guid: 29312a108de6b4f4c9e99c061396c0cb, type: 3}
+  idleSpawnPoints:
+  - {fileID: 1801152026}
+  - {fileID: 842741535}
+  - {fileID: 549675394}
+  - {fileID: 1825203595}
+  raidSpawnPoint: {fileID: 0}
+  idleBossPrefab: {fileID: 0}
+  raidBossPrefab: {fileID: 0}
+  bossSpawnPoint: {fileID: 0}
 --- !u!114 &876976297
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1715,6 +1791,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c63c027b142cd1a4aabc1f7c557a9073, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Managers.GrowthManager
+  displayGold: 0
 --- !u!114 &876976298
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1886,8 +1963,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -260, y: 135}
-  m_SizeDelta: {x: 480, y: 230}
+  m_AnchoredPosition: {x: -219.35773, y: 90.898865}
+  m_SizeDelta: {x: 398.7155, y: 141.7978}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1332314199
 MonoBehaviour:
@@ -1927,6 +2004,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1332314197}
   m_CullTransparentMesh: 1
+--- !u!1 &1353284392
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1353284393}
+  m_Layer: 0
+  m_Name: Player_Healer
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1353284393
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1353284392}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1685, y: 142, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 180247243}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1369685214
 GameObject:
   m_ObjectHideFlags: 0
@@ -1961,7 +2069,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 250, y: -45}
+  m_AnchoredPosition: {x: 378, y: 5}
   m_SizeDelta: {x: 400, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1369685216
@@ -2006,7 +2114,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -2130,7 +2238,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4294967040
   m_fontColor: {r: 0, g: 1, b: 1, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -2143,7 +2251,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -2374,7 +2482,7 @@ MonoBehaviour:
   m_fontMaterials: []
   m_fontColor32:
     serializedVersion: 2
-    rgba: 4294967295
+    rgba: 4278512639
   m_fontColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   m_enableVertexGradient: 0
   m_colorMode: 3
@@ -2387,7 +2495,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -2601,7 +2709,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -2735,6 +2843,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1487797946}
   m_CullTransparentMesh: 1
+--- !u!1 &1570131623
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1570131624}
+  m_Layer: 0
+  m_Name: Player_Rogue
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1570131624
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1570131623}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1654, y: 457, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 180247243}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1589348441
 GameObject:
   m_ObjectHideFlags: 0
@@ -2814,7 +2953,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -3029,7 +3168,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -3253,16 +3392,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
   isPlayerControlled: 0
-  Status:
-    characterName: 
-    role: 0
-    MaxHP: 1000
-    CurrentHP: 0
-    MaxMP: 100
-    CurrentMP: 0
-    Skill1MaxCooldown: 8
-    Skill2MaxCooldown: 20
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!114 &1801152028
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3277,17 +3413,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.Classes.Warrior
   characterName: 
   role: 0
-  maxHealth: 1000
-  currentHealth: 0
-  movementSpeed: 5
-  attackRange: 2
-  attackSpeed: 1
   autoAttackDamage: 30
-  currentThreat: 0
-  totalDamageDealt: 0
-  totalHealingDone: 0
-  totalDamageTaken: 0
-  aggroDuration: 0
+  attackSpeed: 1
+  attackRange: 2
+  baseAttackCooldown: 1
   skillNames:
   - 
   - 
@@ -3296,17 +3425,29 @@ MonoBehaviour:
   - 0
   - 0
   - 0
-  skillCurrentCD:
-  - 0
-  - 0
-  - 0
   ultimateName: 
   ultimateCooldown: 60
-  ultimateCurrentCD: 0
+  targetBoss: {fileID: 0}
   shieldAmount: 0
   damageReductionMultiplier: 1
   attackPowerMultiplier: 1
-  isInvulnerable: 0
+  movementSpeed: 5
+  maxHealth: 1000
+  _currentHealth: 0
+  _isInvulnerable: 0
+  currentThreat: 0
+  threatMultiplier: 1
+  aggroDuration: 0
+  totalDamageDealt: 0
+  totalHealingDone: 0
+  totalDamageTaken: 0
+  attackPowerUpgrade:
+    statName: "\uAE30\uBCF8 \uACF5\uACA9\uB825"
+    currentLevel: 1
+    baseCost: 10
+    costMultiplier: 1.15
+    baseStat: 15
+    statIncreasePerLevel: 3
 --- !u!1 &1819263167
 GameObject:
   m_ObjectHideFlags: 0
@@ -3344,8 +3485,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 1}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -45}
-  m_SizeDelta: {x: 0, y: 90}
+  m_AnchoredPosition: {x: 0, y: -59.7003}
+  m_SizeDelta: {x: 0, y: 119.4007}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1819263169
 MonoBehaviour:
@@ -3430,16 +3571,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
   isPlayerControlled: 0
-  Status:
-    characterName: 
-    role: 0
-    MaxHP: 1000
-    CurrentHP: 0
-    MaxMP: 100
-    CurrentMP: 0
-    Skill1MaxCooldown: 8
-    Skill2MaxCooldown: 20
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!114 &1825203597
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3454,17 +3592,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.Classes.Healer
   characterName: 
   role: 0
-  maxHealth: 1000
-  currentHealth: 0
-  movementSpeed: 5
-  attackRange: 2
-  attackSpeed: 1
   autoAttackDamage: 30
-  currentThreat: 0
-  totalDamageDealt: 0
-  totalHealingDone: 0
-  totalDamageTaken: 0
-  aggroDuration: 0
+  attackSpeed: 1
+  attackRange: 2
+  baseAttackCooldown: 1
   skillNames:
   - 
   - 
@@ -3473,17 +3604,29 @@ MonoBehaviour:
   - 0
   - 0
   - 0
-  skillCurrentCD:
-  - 0
-  - 0
-  - 0
   ultimateName: 
   ultimateCooldown: 60
-  ultimateCurrentCD: 0
+  targetBoss: {fileID: 0}
   shieldAmount: 0
   damageReductionMultiplier: 1
   attackPowerMultiplier: 1
-  isInvulnerable: 0
+  movementSpeed: 5
+  maxHealth: 1000
+  _currentHealth: 0
+  _isInvulnerable: 0
+  currentThreat: 0
+  threatMultiplier: 1
+  aggroDuration: 0
+  totalDamageDealt: 0
+  totalHealingDone: 0
+  totalDamageTaken: 0
+  attackPowerUpgrade:
+    statName: "\uAE30\uBCF8 \uACF5\uACA9\uB825"
+    currentLevel: 1
+    baseCost: 10
+    costMultiplier: 1.15
+    baseStat: 15
+    statIncreasePerLevel: 3
 --- !u!1 &1870009525
 GameObject:
   m_ObjectHideFlags: 0
@@ -3494,6 +3637,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1870009527}
   - component: {fileID: 1870009526}
+  - component: {fileID: 1870009528}
   m_Layer: 0
   m_Name: Directional Light
   m_TagString: Untagged
@@ -3581,6 +3725,66 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1870009528
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1870009525}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
+--- !u!1 &1920348087
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1920348088}
+  m_Layer: 0
+  m_Name: Player_Mage
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1920348088
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1920348087}
+  serializedVersion: 2
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1390, y: 181, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 180247243}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1933489609
 GameObject:
   m_ObjectHideFlags: 0
@@ -3660,7 +3864,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -3875,8 +4079,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 1, y: 0}
   m_AnchorMax: {x: 1, y: 0}
-  m_AnchoredPosition: {x: -100, y: 100}
-  m_SizeDelta: {x: 160, y: 160}
+  m_AnchoredPosition: {x: -93.9469, y: 69.999985}
+  m_SizeDelta: {x: 147.8938, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1969178967
 MonoBehaviour:
@@ -4039,7 +4243,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2
@@ -4186,3 +4390,4 @@ SceneRoots:
   - {fileID: 969674431}
   - {fileID: 249557913}
   - {fileID: 921894724}
+  - {fileID: 180247243}
