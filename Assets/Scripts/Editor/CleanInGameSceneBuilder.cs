@@ -37,6 +37,8 @@ namespace BossRaid.Editor
             var cameraGO = new GameObject("Main Camera");
             var cam = cameraGO.AddComponent<Camera>();
             cam.tag = "MainCamera";
+            cam.orthographic = true;
+            cam.orthographicSize = 6.0f; // 2D 씬에 적합한 사이즈
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.1f, 0.1f, 0.12f); // 약간 어두운 방치형 백그라운드 느낌
             cameraGO.transform.position = new Vector3(0, 0, -10);
@@ -49,11 +51,20 @@ namespace BossRaid.Editor
             // 3. 기존에 만든 Setup 메서드 순차적으로 자동 실행
             // [Step 1] 매니저 및 존(Zone) 뼈대
             IdleRaidSceneSetup.SetupScene();
+            
+            // [Step 2] 배경화면 설정
+            IdleRaidSceneSetup.SetupBackground();
+            
+            // [Step 3] 스폰 포인트 설정 및 자동 연결
+            IdleRaidSceneSetup.SetupSpawnPoints();
+            
+            // [Step 4] 유저 지정 프리팹 자동 연결
+            IdleRaidSceneSetup.AssignPrefabs();
 
-            // [Step 2] 4개 직업 캐릭터 생성 및 파티 세팅
+            // [Step 5] 4개 직업 캐릭터 생성 및 파티 세팅
             IdleRaidSceneSetup.CreateCharactersAndAssign();
 
-            // [Step 3] 가로형 방치형 HUD 캔버스 구축
+            // [Step 6] 가로형 방치형 HUD 캔버스 구축
             InGameUIBuilder.BuildLandscapeUI();
 
             // 4. 유니티 Build Settings 에 씬 등록 (없으면 추가)
