@@ -29,12 +29,15 @@ namespace BossRaid.Combat.Boss
         public bool canBeInterrupted = true;
 
         private Animator animator;
+        private SPUM_Prefabs spumPrefab;
         private Collider bossCollider;
 
         private void Awake()
         {
             animator = GetComponentInChildren<Animator>();
+            spumPrefab = GetComponentInChildren<SPUM_Prefabs>();
             bossCollider = GetComponent<Collider>();
+            if (bossCollider == null) bossCollider = GetComponentInChildren<Collider>();
         }
 
         private void Start() => InitializeBoss();
@@ -118,7 +121,9 @@ namespace BossRaid.Combat.Boss
                 CharacterBase target = GetRandomTarget();
                 if (target != null)
                 {
-                    if (animator != null) animator.SetTrigger("AttackTrigger");
+                    if (spumPrefab != null) spumPrefab.PlayAnimation(PlayerState.ATTACK, 0);
+                    else if (animator != null) animator.SetTrigger("AttackTrigger");
+                    
                     target.TakeDamage(autoAttackDamage);
                 }
                 else

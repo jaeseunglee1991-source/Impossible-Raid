@@ -153,16 +153,24 @@ namespace BossRaid.Managers
         /// </summary>
         private void SpawnCharacter(GameObject prefab, Vector3 position, bool isIdleMode)
         {
-            if (prefab == null) return;
+            if (prefab == null) 
+            {
+                Debug.LogError("[BattleManager] 스폰하려는 캐릭터 프리팹이 NULL입니다!");
+                return;
+            }
 
             GameObject charObj = Instantiate(prefab, position, Quaternion.identity);
             TagCharacterController controller = charObj.GetComponent<TagCharacterController>();
             
             if (controller != null)
             {
-                // 상태 분기의 핵심: isIdleMode가 true면 TagCharacterController 내부에서 수동 조작이 막히고 AI가 켜짐
                 controller.EnableIdleAIMode(isIdleMode);
                 ActiveCharacters.Add(controller);
+                Debug.Log($"[BattleManager] {prefab.name} 스폰 성공 및 컨트롤러 연결 완료.");
+            }
+            else
+            {
+                Debug.LogError($"[BattleManager] {charObj.name} 프리팹에 'TagCharacterController' 컴포넌트가 없습니다! 스크립트가 누락되었거나 이름이 바뀌었는지 확인하세요.");
             }
         }
 

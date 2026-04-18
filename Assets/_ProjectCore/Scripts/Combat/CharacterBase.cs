@@ -448,7 +448,9 @@ namespace BossRaid.Combat
         //  내부 레퍼런스
         // ═══════════════════════════════════════════════════════════
 
-        private Animator _animator;
+        private Animator     _animator;
+        private SPUM_Prefabs _spumPrefab;
+        private Rigidbody    _rb;
 
         // ═══════════════════════════════════════════════════════════
         //  초기화
@@ -457,6 +459,8 @@ namespace BossRaid.Combat
         protected virtual void Awake()
         {
             _animator = GetComponentInChildren<Animator>();
+            _spumPrefab = GetComponentInChildren<SPUM_Prefabs>();
+            _rb = GetComponent<Rigidbody>();
         }
 
         protected virtual void Start()
@@ -658,19 +662,40 @@ namespace BossRaid.Combat
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// SPUM 등 Animator 트리거를 안전하게 실행합니다.
-        /// 사망 상태에서는 "Die" 트리거 외 모두 무시합니다.
+        /// SPUM 및 일반 Animator를 지원합니다.
         /// </summary>
-        public void PlayAnimation(string triggerName)
+        public void PlayAnimation(string triggerName, int index = 0)
         {
             if (_animator == null) return;
             if (IsDead && triggerName != "Die") return;
 
+            // SPUM 컴포넌트가 있는 경우
+            if (_spumPrefab != null)
+            {
+                PlayerState state = PlayerState.IDLE;
+                switch (triggerName.ToUpper())
+                {
+                    case "IDLE":   state = PlayerState.IDLE; break;
+                    case "MOVE":   state = PlayerState.MOVE; break;
+                    case "ATTACK": state = PlayerState.ATTACK; break;
+                    case "HIT":    state = PlayerState.DAMAGED; break;
+                    case "DIE":    state = PlayerState.DEATH; break;
+                    default:       state = PlayerState.OTHER; break;
+                }
+                _spumPrefab.PlayAnimation(state, index);
+                return;
+            }
+
+            // 일반 애니메이터 방식 보강
             _animator.ResetTrigger("Idle");
             _animator.ResetTrigger("Move");
             _animator.ResetTrigger("Attack");
             _animator.ResetTrigger("Hit");
             _animator.ResetTrigger("Die");
+
+            // SPUM 파라미터 직접 호환성 (Bool 필드)
+            if (triggerName == "Move") _animator.SetBool("1_Move", true);
+            else if (triggerName == "Idle") _animator.SetBool("1_Move", false);
 
             _animator.SetTrigger(triggerName);
         }

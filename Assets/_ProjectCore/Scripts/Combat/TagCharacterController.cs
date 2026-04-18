@@ -50,6 +50,7 @@ namespace BossRaid.Combat
         public void StartCombat()
         {
             isCombatActive = true;
+            Debug.Log($"[TagCharacterController] {characterBase?.characterName} 전투 시작 (isCombatActive = true)");
             FindBoss();
         }
 
@@ -204,16 +205,17 @@ namespace BossRaid.Combat
             var bossMonobehaviour = currentBoss as MonoBehaviour;
             if (bossMonobehaviour == null)
             {
+                // 보스를 못 찾았다면 다시 시도
+                if (Time.frameCount % 60 == 0) Debug.Log($"[AI] {characterBase.characterName} 보스 탐색 중...");
                 FindBoss();
                 return;
             }
 
-            // 거리 계산 최적화: 보스의 중심점이 아니라, 덩치(콜라이더)를 빼서 가장자리까지의 거리를 측정해야 무한 걷기 버그가 발생하지 않음.
+            // 거리 계산
             float distanceToBoss = Vector3.Distance(transform.position, bossMonobehaviour.transform.position);
             var bossCollider = bossMonobehaviour.GetComponent<Collider>();
             if (bossCollider != null)
             {
-                // 보스의 덩치만큼 거리를 가깝게 판정해줍니다.
                 distanceToBoss -= bossCollider.bounds.extents.magnitude * 0.5f;
             }
 
@@ -262,6 +264,7 @@ namespace BossRaid.Combat
                     {
                         lastAIAttackTime = Time.time;
                         lastAnim = "Attack";
+                        Debug.Log($"[AI] {characterBase.characterName} 스킬 사용!");
                     }
 
                     // 스킬을 안 썼고, 평타 쿨타임(attackSpeed)이 찼다면 평타 시전
@@ -272,7 +275,7 @@ namespace BossRaid.Combat
                         
                         characterBase.DealDamageTo(currentBoss, characterBase.autoAttackDamage);
                         lastAIAttackTime = Time.time;
-                        // Debug.Log($"<color=white>[AI] {characterBase.characterName} 평타 공격!</color>");
+                        Debug.Log($"[AI] {characterBase.characterName} 평타 공격! (공격력: {characterBase.autoAttackDamage})");
                     }
                     else if (!skillCasted && lastAnim != "Idle" && lastAnim != "Attack") 
                     {
