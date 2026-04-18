@@ -13,9 +13,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 1000f; currentHealth = maxHealth;
             characterName = "사제";
             attackRange = 10f; autoAttackDamage = 20f; attackSpeed = 1.5f;
-            skillNames = new string[] { "신성한 일격", "순간 치유", "보호막" };
-            skillCooldowns = new float[] { 6f, 3f, 10f };
-            ultimateName = "천상의 찬가"; ultimateCooldown = 70f;
+            RegisterSkills(
+                new SkillDefinition("신성한 일격", 6f, 0, desc: "보스 피해 + 50% 스마트 힐"),
+                new SkillDefinition("순간 치유", 3f, 1, desc: "가장 체력 낮은 아군 대폭 회복"),
+                new SkillDefinition("보호막", 10f, 2, desc: "아군 1명 400 피해 흡수 보호막")
+            );
+            RegisterUltimate(new SkillDefinition("천상의 찬가", 70f, 0, ultimate: true, desc: "파티 전체 대폭 지속 회복"));
         }
 
         public override void UseSkill(int idx)

@@ -6,12 +6,14 @@ namespace BossRaid.Combat
     [System.Serializable]
     public abstract class SkillBase
     {
-        public string skillName;
-        public float cooldownSeconds;
+        public BossRaid.Data.SkillData skillData;
         public float currentCooldown;
-        public float range;
-        public float damageAmount;
-        public float healingAmount;
+
+        public string skillName => skillData != null ? skillData.skillName : "Unknown";
+        public float cooldownSeconds => skillData != null ? skillData.cooldownSeconds : 0f;
+        public float range => skillData != null ? skillData.range : 0f;
+        public float damageAmount => skillData != null ? skillData.damageAmount : 0f;
+        public float healingAmount => skillData != null ? skillData.healingAmount : 0f;
 
         public bool IsReady => currentCooldown <= 0;
 
@@ -20,7 +22,7 @@ namespace BossRaid.Combat
             if (currentCooldown > 0) currentCooldown -= deltaTime;
         }
 
-        public abstract void Execute(CharacterBase user, CharacterBase target);
+        public abstract void Execute(CharacterBase user);
         
         protected void StartCooldown()
         {

@@ -1,7 +1,9 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
 using BossRaid.Managers;
 using BossRaid.Combat;
+using BossRaid.UI;
 
 /// <summary>
 /// 에디터 상단 메뉴에서 한 번의 클릭으로 방치형+레이드 씬의 필수 오브젝트와 
@@ -12,6 +14,15 @@ public class IdleRaidSceneSetup : EditorWindow
     [MenuItem("Tools/1. Setup Idle Boss Raid Scene (방치형 씬 필수 매니저 셋업)")]
     public static void SetupScene()
     {
+        // 안전 장치: 로그인 씬 등에서 실수로 실행하는 것 방지
+        string activeSceneName = UnityEditor.SceneManagement.EditorSceneManager.GetActiveScene().name;
+        if (activeSceneName != "InGameScene")
+        {
+            EditorUtility.DisplayDialog("실행 오류", 
+                $"현재 씬({activeSceneName})은 인게임 셋업 대상이 아닙니다.\n'InGameScene'을 열고 다시 실행해주세요.", "확인");
+            return;
+        }
+
         Debug.Log("<color=cyan>방치형 + 보스레이드 통합 씬 자동 구성을 시작합니다...</color>");
 
         GameObject coreManagers = GameObject.Find("CoreManagers");
@@ -36,10 +47,12 @@ public class IdleRaidSceneSetup : EditorWindow
         stageManager.BossRaidSystem = raidSystem;
         EditorUtility.SetDirty(stageManager);
 
-        // 배경화면, 스폰 포인트, 프리팹 자동 셋업 포함
+        // 배경화면, 스폰 포인트, 프리팹, Canvas Scaler 자동 셋업 포함
         SetupBackground();
         SetupSpawnPoints();
         AssignPrefabs();
+        SetupCanvasScalers();
+        SetupSafeArea();
 
         Debug.Log("<color=green>✅ [1단계 완료] 씬 내 필수 매니저 프레임워크와 스크립트 연결이 완료되었습니다.</color>");
     }
@@ -136,10 +149,28 @@ public class IdleRaidSceneSetup : EditorWindow
             sr.sprite = bgSprite;
             sr.sortingOrder = -100; // 최하단 레이어
             
-            // 배경 스케일을 원본 크기(1:1)로 설정 (필요시 에디터에서 직접 조절 권장)
-            bgObj.transform.localScale = new Vector3(1f, 1f, 1f);  
+            // BackgroundScaler 컴포넌트 부착 — 런타임에 카메라 크기에 맞춰 자동 스케일링
+            var bgScaler = GetOrAddComponent<BackgroundScaler>(bgObj);
+            bgScaler.overscale = 1.05f;
+            EditorUtility.SetDirty(bgScaler);
             
-            Debug.Log("<color=green>✅ [배경화면] Ingame_Back 스프라이트가 적용되었습니다. (임포트 설정 자동 수정 완료)</color>");
+            // 에디터에서 미리보기용으로 임시 스케일 계산 (런타임에는 BackgroundScaler가 대체)
+            Camera mainCam = Camera.main;
+            if (mainCam != null && mainCam.orthographic)
+            {
+                float camH = mainCam.orthographicSize * 2f;
+                float camW = camH * mainCam.aspect;
+                float sprW = bgSprite.bounds.size.x;
+                float sprH = bgSprite.bounds.size.y;
+                float scale = Mathf.Max(camW / sprW, camH / sprH) * 1.05f;
+                bgObj.transform.localScale = new Vector3(scale, scale, 1f);
+            }
+            else
+            {
+                bgObj.transform.localScale = new Vector3(1f, 1f, 1f);
+            }
+            
+            Debug.Log("<color=green>✅ [배경화면] Ingame_Back 스프라이트 + BackgroundScaler 자동 스케일링이 적용되었습니다.</color>");
         }
         else
         {
@@ -240,5 +271,111 @@ public class IdleRaidSceneSetup : EditorWindow
             comp = target.AddComponent<T>();
         }
         return comp;
+    }
+
+    /// <summary>
+    /// 씬 내 모든 Canvas의 CanvasScaler를 안드로이드 가로모드(1920x1080)에 최적화된 설정으로 일괄 수정합니다.
+    /// - Scale Mode: Scale With Screen Size
+    /// - Reference Resolution: 1920 x 1080
+    /// - Screen Match Mode: Match Width Or Height
+    /// - Match: 0.5 (가로/세로 균형) — 가로형 게임에서 다양한 비율에 안정적
+    /// </summary>
+    [MenuItem("Tools/6. Fix All Canvas Scalers (모든 캔버스 스케일러 일괄 수정 - 안드로이드 가로모드)")]
+    public static void SetupCanvasScalers()
+    {
+        Canvas[] allCanvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+        
+        if (allCanvases.Length == 0)
+        {
+            Debug.LogWarning("씬에 Canvas가 하나도 없습니다. UI를 먼저 생성해주세요.");
+            return;
+        }
+
+        int fixedCount = 0;
+        foreach (Canvas canvas in allCanvases)
+        {
+            CanvasScaler scaler = canvas.GetComponent<CanvasScaler>();
+            if (scaler == null)
+            {
+                scaler = canvas.gameObject.AddComponent<CanvasScaler>();
+            }
+
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0.5f; // 가로형 게임: 0.5로 가로/세로 균형 잡기 (다양한 비율 대응)
+            scaler.referencePixelsPerUnit = 100f;
+
+            EditorUtility.SetDirty(scaler);
+            fixedCount++;
+            Debug.Log($"  ✔ Canvas '{canvas.gameObject.name}' → ScaleWithScreenSize (1920x1080, Match=0.5)");
+        }
+
+        Debug.Log($"<color=green>✅ [Canvas Scaler] 총 {fixedCount}개의 Canvas Scaler가 안드로이드 가로모드(1920x1080)에 맞게 수정되었습니다.</color>");
+    }
+
+    /// <summary>
+    /// 씬 내 모든 Canvas에 SafeArea 래퍼 오브젝트를 생성하여
+    /// 노치/카메라 구멍/하단 네비게이션 바를 피해 UI를 배치합니다.
+    /// </summary>
+    [MenuItem("Tools/7. Setup Safe Area (노치 및 하단 바 대응 - 모든 Canvas)")]
+    public static void SetupSafeArea()
+    {
+        Canvas[] allCanvases = Object.FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+        
+        if (allCanvases.Length == 0)
+        {
+            Debug.LogWarning("씬에 Canvas가 하나도 없습니다. UI를 먼저 생성해주세요.");
+            return;
+        }
+
+        int setupCount = 0;
+        foreach (Canvas canvas in allCanvases)
+        {
+            // 이미 SafeArea가 있는지 확인
+            Transform existing = canvas.transform.Find("SafeArea");
+            if (existing != null)
+            {
+                // 컴포넌트만 확인해서 붙여주기
+                if (existing.GetComponent<SafeAreaAdapter>() == null)
+                    existing.gameObject.AddComponent<SafeAreaAdapter>();
+                EditorUtility.SetDirty(existing.gameObject);
+                setupCount++;
+                continue;
+            }
+
+            // SafeArea 래퍼 오브젝트 생성
+            GameObject safeAreaObj = new GameObject("SafeArea");
+            safeAreaObj.transform.SetParent(canvas.transform, false);
+
+            RectTransform safeRect = safeAreaObj.AddComponent<RectTransform>();
+            safeRect.anchorMin = Vector2.zero;
+            safeRect.anchorMax = Vector2.one;
+            safeRect.offsetMin = Vector2.zero;
+            safeRect.offsetMax = Vector2.zero;
+
+            safeAreaObj.AddComponent<SafeAreaAdapter>();
+
+            // 기존 Canvas 자식들을 SafeArea 하위로 이동
+            // (새로 만들어진 SafeArea 자체는 제외)
+            int childCount = canvas.transform.childCount;
+            for (int i = childCount - 1; i >= 0; i--)
+            {
+                Transform child = canvas.transform.GetChild(i);
+                if (child != safeAreaObj.transform)
+                {
+                    child.SetParent(safeRect, true);
+                }
+            }
+
+            // SafeArea를 Canvas의 첫 번째 자식으로 배치
+            safeAreaObj.transform.SetAsFirstSibling();
+
+            EditorUtility.SetDirty(canvas.gameObject);
+            setupCount++;
+            Debug.Log($"  ✔ Canvas '{canvas.gameObject.name}' → SafeArea 래퍼 생성 완료 (기존 UI 자동 이동)");
+        }
+
+        Debug.Log($"<color=green>✅ [Safe Area] 총 {setupCount}개 Canvas에 SafeAreaAdapter가 적용되었습니다. 노치/하단바 자동 회피!</color>");
     }
 }

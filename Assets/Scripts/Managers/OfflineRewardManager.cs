@@ -31,9 +31,13 @@ namespace BossRaid.Managers
 
         private async void Start()
         {
-            // 매니저 및 UI 컴포넌트 연결 안 되어 있으면 씬에서 자동으로 찾기
-            if (growthManager == null) growthManager = FindObjectOfType<GrowthManager>();
-            if (resultPopup == null) resultPopup = FindObjectOfType<OfflineResultPopup>();
+            // 매니저 및 UI 컴포넌트 연결 안 되어 있으면 우선 싱글턴으로 찾기, 팝업은 인스펙터 할당 필수
+            if (growthManager == null) growthManager = GrowthManager.Instance;
+            
+            if (resultPopup == null) 
+            {
+                Debug.LogWarning("[OfflineRewardManager] OfflineResultPopup이 인스펙터에 연결되지 않았습니다. 결과 팝업이 뜨지 않습니다.");
+            }
 
             // 게임 시작 시 오프라인 보상 계산 시도
             await CalculateOfflineReward();

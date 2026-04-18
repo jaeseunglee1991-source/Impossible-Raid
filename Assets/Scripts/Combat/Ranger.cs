@@ -13,9 +13,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 1000f; currentHealth = maxHealth;
             characterName = "레인저";
             attackRange = 12f; autoAttackDamage = 45f; attackSpeed = 1f;
-            skillNames = new string[] { "관통의 화살", "일제 사격", "사냥꾼의 징표" };
-            skillCooldowns = new float[] { 12f, 8f, 20f };
-            ultimateName = "속사"; ultimateCooldown = 50f;
+            RegisterSkills(
+                new SkillDefinition("관통의 화살", 12f, 0, interrupt: true, desc: "방어력 무시 + 차단"),
+                new SkillDefinition("일제 사격", 8f, 1, desc: "광역 피해"),
+                new SkillDefinition("사냥꾼의 징표", 20f, 2, desc: "10초 피해 10% 증가 디버프")
+            );
+            RegisterUltimate(new SkillDefinition("속사", 50f, 0, ultimate: true, desc: "5초간 초고속 평타"));
         }
 
         public override void UseSkill(int idx)

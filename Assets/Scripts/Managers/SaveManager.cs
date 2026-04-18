@@ -56,11 +56,12 @@ namespace BossRaid.Managers
         }
 
         // ═══════════════════════════════════════════════════════════
-        //  더티 플래그 (불필요한 Write 차단)
+        //  더티 플래그 (불필요한 Write 차단) & 메모리 데이터
         // ═══════════════════════════════════════════════════════════
 
         private bool   _isDirty       = false;
         private float  _dirtyTimer    = 0f;
+        private PlayerSaveData _memoryData = new PlayerSaveData();
 
         /// <summary>
         /// 저장이 필요한 상태 변경이 생겼을 때 호출합니다.
@@ -161,26 +162,28 @@ namespace BossRaid.Managers
 
         private PlayerSaveData CollectSaveData()
         {
-            var data = new PlayerSaveData
-            {
-                savedAtUtc = DateTime.UtcNow.ToString("o")
-            };
+            if (_memoryData == null) _memoryData = new PlayerSaveData();
+            
+            _memoryData.savedAtUtc = DateTime.UtcNow.ToString("o");
 
             // 1. 골드
             if (GrowthManager.Instance != null)
-                data.gold = GrowthManager.Instance.displayGold;
+                _memoryData.gold = GrowthManager.Instance.displayGold;
 
             // 2. 스테이지
             if (StageManager.Instance != null)
             {
-                data.stageLevel = StageManager.Instance.CurrentStageLevel;
-                data.mobsKilled = StageManager.Instance.MobsKilledInStage;
+                _memoryData.stageLevel = StageManager.Instance.CurrentStageLevel;
+                _memoryData.mobsKilled = StageManager.Instance.MobsKilledInStage;
             }
 
-            // 3. 강화 레벨 — CombatManager에 등록된 모든 플레이어에서 수집
-            CollectUpgrades(data);
+            // 3. 강화 레벨 — 씬에 있는 캐릭터들로부터 수집 시 덮어쓰기 (없는 애들은 기존 기록 유지)
+            CollectUpgrades(_memoryData);
 
-            return data;
+            // 4. 장비 인벤토리
+            InventoryManager.Instance?.CollectToSaveData(_memoryData);
+
+            return _memoryData;
         }
 
         /// <summary>
@@ -189,13 +192,14 @@ namespace BossRaid.Managers
         /// </summary>
         private void CollectUpgrades(PlayerSaveData data)
         {
-            var characters = FindObjectsOfType<CharacterBase>();
+            var characters = UnityEngine.Object.FindObjectsByType<CharacterBase>(FindObjectsSortMode.None);
             foreach (var character in characters)
             {
                 string keyPrefix = character.characterName;
 
                 // CharacterBase.attackPowerUpgrade
                 SaveUpgradeEntry(data, keyPrefix, character.attackPowerUpgrade);
+                data.SetEquippedSlots(character.characterName, character.equippedSlots);
 
                 // 직업 클래스에 추가 StatUpgrade가 있다면 여기에 추가
                 // 예: if (character is Warrior w) SaveUpgradeEntry(data, keyPrefix, w.defenseUpgrade);
@@ -249,7 +253,8 @@ namespace BossRaid.Managers
                     return;
                 }
 
-                ApplySaveData(data);
+                _memoryData = data; // 메모리에 유지 
+                ApplySaveData(_memoryData);
 
                 Debug.Log($"<color=cyan>[SaveManager] 불러오기 완료 " +
                           $"(골드: {data.gold:F0}, 스테이지: {data.stageLevel})</color>");
@@ -282,15 +287,21 @@ namespace BossRaid.Managers
 
             // 3. 강화 레벨
             ApplyUpgrades(data);
+
+            // 4. 장비 인벤토리
+            InventoryManager.Instance?.RestoreFromSaveData(data);
         }
 
         private void ApplyUpgrades(PlayerSaveData data)
         {
-            var characters = FindObjectsOfType<CharacterBase>();
+            var characters = UnityEngine.Object.FindObjectsByType<CharacterBase>(FindObjectsSortMode.None);
             foreach (var character in characters)
             {
                 string keyPrefix = character.characterName;
                 RestoreUpgrade(data, keyPrefix, character.attackPowerUpgrade);
+
+                int[] savedSlots = data.GetEquippedSlots(character.characterName);
+                if (savedSlots != null) character.RestoreEquippedSlots(savedSlots);
 
                 // 직업 추가 StatUpgrade가 있다면 여기서도 동일하게 복원
             }
@@ -301,6 +312,12 @@ namespace BossRaid.Managers
             if (upgrade == null) return;
             string key = $"{prefix}_{upgrade.statName}";
             upgrade.currentLevel = data.GetUpgradeLevel(key);
+        }
+
+        public int GetSavedUpgradeLevel(string key)
+        {
+            if (_memoryData == null) return 1;
+            return _memoryData.GetUpgradeLevel(key);
         }
 
         // ═══════════════════════════════════════════════════════════

@@ -1,6 +1,7 @@
 using UnityEngine;
 using System.Collections;
 using BossRaid.Combat;
+using BossRaid.UI;
 
 namespace BossRaid.Managers
 {
@@ -73,6 +74,9 @@ namespace BossRaid.Managers
             MobsKilledInStage++;
             GrowthManager.Instance.AddGold(goldReward); // 킬 보상
 
+            // 장비 드랍 시도 (1% 확률)
+            InventoryManager.Instance?.TryDrop(CurrentStageLevel);
+
             if (MobsKilledInStage >= MobsRequiredForBoss)
             {
                 // [버섯커 키우기식] 잡몹을 다 잡으면 보스방에 들어갈지 묻는 UI "도전" 버튼 활성화
@@ -82,8 +86,20 @@ namespace BossRaid.Managers
 
         private void ShowBossChallengeUI()
         {
-            // TODO: 이 시점에 HUD에서 우측 상단 "BOSS 도전" 버튼을 흔들거리게 만듭니다.
-            Debug.Log("[StageManager] 보스 도전 조건 달성! HUD '도전' 버튼 활성화");
+            // HUD의 보스 도전 버튼 활성화
+            if (InGameHUDController.Instance != null)
+            {
+                // 보스 도전 버튼이 있다면 활성화 (버튼 참조는 HUD에서 관리)
+                var bossBtn = InGameHUDController.Instance.giveUpButton; // 임시로 기존 버튼 재활용, 추후 전용 버튼으로 교체
+                if (bossBtn != null)
+                {
+                    bossBtn.gameObject.SetActive(true);
+                    bossBtn.onClick.RemoveAllListeners();
+                    bossBtn.onClick.AddListener(RequestBossChallenge);
+                }
+            }
+
+            Debug.Log("<color=yellow>[StageManager] 보스 도전 조건 달성! '보스 도전' 버튼 활성화</color>");
         }
 
         // ──────────────────────────────────────────────
@@ -101,7 +117,6 @@ namespace BossRaid.Managers
         {
             CurrentState = GameState.Transitioning;
 
-            // TODO: 화면 암전, 경고 사이렌 등 연출
             Debug.Log("<color=red>[StageManager] 보스 레이드 전환 중... 화면 암전!</color>");
 
             // 방치형 스포너 끄기 및 남은 잡몹 파괴 처리
@@ -114,12 +129,10 @@ namespace BossRaid.Managers
             // 레이드 시스템 활성화
             if (BossRaidSystem != null) BossRaidSystem.SetActive(true);
 
-            // 태그 시스템 재개
-            // TODO: 태그용 UI 보이기, 첫 번째 캐릭터 수동 조작 권한 획득 등
+            // BattleManager에서 전투 재초기화 (보스 레이드 모드로 전환)
             if (BattleManager.Instance != null)
             {
-                // 여기서 배틀매니저 초기화 및 캐릭터 타겟팅 재설정
-                // 보스 오브젝트 실체화 등
+                BattleManager.Instance.InitializeBattle();
             }
 
             Debug.Log($"<color=magenta>[StageManager] ⚔ {CurrentStageLevel} 스테이지 레이드 보스 전 진입! ⚔</color>");
@@ -132,6 +145,10 @@ namespace BossRaid.Managers
         public void OnBossDefeated()
         {
             Debug.Log($"<color=cyan>[StageManager] 보스 처치 완료! 다음 스테이지로 넘어갑니다.</color>");
+
+            // 보스 확정 드랍 (최소 Rare 보장)
+            InventoryManager.Instance?.DropFromBoss(CurrentStageLevel);
+
             CurrentStageLevel++;
             MobsKilledInStage = 0;
 

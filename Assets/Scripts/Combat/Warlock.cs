@@ -13,9 +13,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 1000f; currentHealth = maxHealth;
             characterName = "흑마법사";
             attackRange = 10f; autoAttackDamage = 30f; attackSpeed = 1.4f;
-            skillNames = new string[] { "어둠의 화살", "부패", "생명력 흡수" };
-            skillCooldowns = new float[] { 14f, 6f, 10f };
-            ultimateName = "지옥불 정령"; ultimateCooldown = 80f;
+            RegisterSkills(
+                new SkillDefinition("어둠의 화살", 14f, 0, interrupt: true, desc: "암흑 피해 + 차단"),
+                new SkillDefinition("부패", 6f, 1, desc: "12초 지속 피해"),
+                new SkillDefinition("생명력 흡수", 10f, 2, desc: "채널링 피해 + 자힐")
+            );
+            RegisterUltimate(new SkillDefinition("지옥불 정령", 80f, 0, ultimate: true, desc: "운석 낙하 + 정령 소환"));
         }
 
         public override void UseSkill(int idx)

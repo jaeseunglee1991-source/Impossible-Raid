@@ -1,55 +1,55 @@
 using UnityEngine;
 using System.Collections;
+using System.Collections.Generic;
+using System;
 using BossRaid.Combat.Boss;
-using BossRaid.Managers;
 using BossRaid.UI;
+using BossRaid.Managers;
 
 namespace BossRaid.Combat
 {
-    public enum CharacterRole
-    {
-        Tank,
-        Healer,
-        MeleeDPS,
-        RangedDPS
-    }
+    // ─────────────────────────────────────────
+    //  직업 역할 열거형 (BossAI 어그로 타겟팅 연동)
+    // ─────────────────────────────────────────
+    public enum CharacterRole { Tank, MeleeDPS, RangedDPS, Healer }
 
     /// <summary>
     /// ──────────────────────────────────────────────────────────────────
     /// CharacterBase — 모든 직업 클래스(Warrior, Mage 등)의 베이스 클래스
+    ///
+    /// ■ 체력 / 사망 / 부활 / 무적
+    /// ■ 어그로(위협치) / 쉴드 / 피해 경감
+    /// ■ 스킬 슬롯 시스템 (3슬롯 + 궁극기)
+    ///   - allSkills     : 직업 클래스 Awake()에서 등록하는 전체 스킬 목록
+    ///   - equippedSlots : 각 슬롯에 장착된 allSkills 인덱스 (SaveManager 저장)
+    ///   - TryUseSkill() : 슬롯 인덱스로 쿨타임 체크 후 UseSkill() 호출
+    ///   - UseSkill()    : 직업 클래스에서 switch(idx)로 실제 로직 구현
+    /// ■ 방치형 자동전투 AI 연동
+    /// ■ 전투 통계 (ResultManager 연동)
     /// ──────────────────────────────────────────────────────────────────
     /// </summary>
     public class CharacterBase : MonoBehaviour
     {
         // ═══════════════════════════════════════════════════════════
-        //  기본 정보
+        //  기본 정보 / 직업 속성
         // ═══════════════════════════════════════════════════════════
 
         [Header("캐릭터 정보")]
-        public string characterName = "플레이어";
-        public CharacterRole role;
+        public string        characterName = "플레이어";
+        public CharacterRole role          = CharacterRole.MeleeDPS;
 
-        // ═══════════════════════════════════════════════════════════
-        //  스킬 및 공격 (Subclasses 연동용)
-        // ═══════════════════════════════════════════════════════════
+        // ─────────────────────────────────────────
+        //  전투 스탯 (직업 클래스 Awake에서 초기값 설정)
+        // ─────────────────────────────────────────
 
-        [Header("전투 속성")]
-        public float autoAttackDamage = 10f;
-        public float attackSpeed = 1.0f;
-        public float attackRange = 2.0f;
-        public float baseAttackCooldown = 1.0f;
-
-        [Header("스킬")]
-        public string[] skillNames = new string[3];
-        public float[] skillCooldowns = new float[3];
-        public string ultimateName;
-        public float ultimateCooldown;
-
-        public BossRaid.Combat.Boss.BossAI targetBoss;
-        public float shieldAmount = 0f;
-        public float damageReductionMultiplier = 1.0f;
-        public float attackPowerMultiplier = 1.0f;
-        public float movementSpeed = 5f;
+        [Header("전투 스탯")]
+        public float autoAttackDamage        = 50f;
+        public float attackSpeed             = 1.0f;   // 공격 간격(초). 낮을수록 빠름
+        public float attackRange             = 3f;
+        public float movementSpeed           = 5f;
+        public float attackPowerMultiplier   = 1.0f;   // 스킬 계수 배율
+        public float damageReductionMultiplier = 1.0f; // 피해 감소 배율 (0.7 = 30% 경감)
+        public float shieldAmount            = 0f;     // 현재 흡수 가능한 쉴드량
 
         // ═══════════════════════════════════════════════════════════
         //  체력 (HP)
@@ -65,7 +65,7 @@ namespace BossRaid.Combat
         public float currentHealth
         {
             get => _currentHealth;
-            protected set
+            set
             {
                 _currentHealth = Mathf.Clamp(value, 0f, maxHealth);
                 OnHealthChanged?.Invoke(_currentHealth, maxHealth);
@@ -88,12 +88,6 @@ namespace BossRaid.Combat
         private Coroutine _invulnerableCoroutine;
 
         /// <summary>무적 여부. BossAI 패턴 판정에서 호출됩니다.</summary>
-        public bool isInvulnerable
-        {
-            get => _isInvulnerable;
-            set => _isInvulnerable = value;
-        }
-
         public bool CheckInvulnerable() => _isInvulnerable;
 
         // ═══════════════════════════════════════════════════════════
@@ -122,6 +116,315 @@ namespace BossRaid.Combat
         public float totalDamageTaken  = 0f;
 
         // ═══════════════════════════════════════════════════════════
+        //  스킬 슬롯 시스템
+        // ═══════════════════════════════════════════════════════════
+
+        // ─────────────────────────────────────────
+        //  스킬 목록 (직업 클래스 Awake에서 채움)
+        // ─────────────────────────────────────────
+
+        /// <summary>
+        /// 이 캐릭터가 쓸 수 있는 전체 스킬 목록.
+        /// 직업 클래스 Awake() 에서 RegisterSkills()로 채웁니다.
+        /// </summary>
+        public List<SkillDefinition> allSkills { get; private set; } = new List<SkillDefinition>();
+
+        /// <summary>궁극기 정의 (별도 슬롯)</summary>
+        public SkillDefinition ultimateSkill { get; private set; }
+
+        // ─────────────────────────────────────────
+        //  장착 슬롯 (SaveManager 저장 대상)
+        // ─────────────────────────────────────────
+
+        public const int SKILL_SLOT_COUNT = 3;
+
+        /// <summary>
+        /// 슬롯[0..2] 에 장착된 allSkills 인덱스.
+        /// -1 이면 빈 슬롯.
+        /// </summary>
+        public int[] equippedSlots { get; private set; } = { 0, 1, 2 };
+
+        // ─────────────────────────────────────────
+        //  쿨타임 타이머 (런타임 전용 — 저장 안 함)
+        // ─────────────────────────────────────────
+
+        private float[] _slotCooldownTimers  = new float[SKILL_SLOT_COUNT];
+        private float   _ultimateCooldownTimer = 0f;
+
+        // ─────────────────────────────────────────
+        //  HUD 연동용 프로퍼티 (InGameHUDController가 읽음)
+        // ─────────────────────────────────────────
+
+        /// <summary>현재 장착된 슬롯의 스킬 이름 배열 (HUD 버튼 라벨)</summary>
+        public string[] skillNames
+        {
+            get
+            {
+                var names = new string[SKILL_SLOT_COUNT];
+                for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+                    names[i] = GetEquippedSkill(i)?.skillName ?? "—";
+                return names;
+            }
+        }
+
+        /// <summary>현재 장착된 슬롯의 쿨타임 배열 (HUD 버튼 초기화)</summary>
+        public float[] skillCooldowns
+        {
+            get
+            {
+                var cds = new float[SKILL_SLOT_COUNT];
+                for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+                    cds[i] = GetEquippedSkill(i)?.cooldown ?? 0f;
+                return cds;
+            }
+        }
+
+        public string ultimateName     => ultimateSkill?.skillName   ?? "궁극기";
+        public float  ultimateCooldown => ultimateSkill?.cooldown     ?? 60f;
+
+        // ─────────────────────────────────────────
+        //  현재 전투 타겟 (직업 클래스 UseSkill에서 사용)
+        // ─────────────────────────────────────────
+
+        /// <summary>자동전투 AI 또는 TagCharacterController가 설정합니다.</summary>
+        public Boss.IBossPatternHandler targetBoss { get; set; }
+
+        // ─────────────────────────────────────────
+        //  스킬 등록 API (직업 클래스 Awake에서 호출)
+        // ─────────────────────────────────────────
+
+        /// <summary>
+        /// 직업 클래스 Awake()에서 이 메서드로 스킬을 등록합니다.
+        ///
+        /// 사용 예시 (FireMage.Awake):
+        ///   RegisterSkills(
+        ///       new SkillDefinition("화염 작렬", 12f, 0, interrupt: true),
+        ///       new SkillDefinition("화염구",     4f, 1),
+        ///       new SkillDefinition("불기둥",    10f, 2)
+        ///   );
+        ///   RegisterUltimate(new SkillDefinition("발화", 60f, 0, ultimate: true));
+        /// </summary>
+        protected void RegisterSkills(params SkillDefinition[] skills)
+        {
+            allSkills.Clear();
+            allSkills.AddRange(skills);
+
+            // 기본 장착: 앞 3개를 순서대로 슬롯에 배치
+            for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+                equippedSlots[i] = (i < allSkills.Count) ? i : -1;
+        }
+
+        protected void RegisterUltimate(SkillDefinition ultimate)
+        {
+            ultimateSkill = ultimate;
+        }
+
+        // ─────────────────────────────────────────
+        //  장착 / 해제 API (SkillEquipManager에서 호출)
+        // ─────────────────────────────────────────
+
+        /// <summary>
+        /// slotIndex(0~2) 슬롯에 allSkills[skillIndex]를 장착합니다.
+        /// 이미 다른 슬롯에 같은 스킬이 있으면 자동으로 스왑합니다.
+        /// </summary>
+        public bool EquipSkill(int slotIndex, int skillIndex)
+        {
+            if (slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return false;
+            if (skillIndex < 0 || skillIndex >= allSkills.Count) return false;
+
+            // 동일 스킬이 다른 슬롯에 있으면 스왑
+            for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+            {
+                if (i != slotIndex && equippedSlots[i] == skillIndex)
+                {
+                    equippedSlots[i] = equippedSlots[slotIndex]; // 기존 슬롯에 이전 스킬
+                    break;
+                }
+            }
+
+            equippedSlots[slotIndex] = skillIndex;
+            SaveManager.Instance?.MarkDirty();
+
+            Debug.Log($"[{characterName}] 슬롯 {slotIndex} ← {allSkills[skillIndex].skillName} 장착");
+            return true;
+        }
+
+        /// <summary>slotIndex 슬롯을 비웁니다.</summary>
+        public void UnequipSkill(int slotIndex)
+        {
+            if (slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return;
+            equippedSlots[slotIndex] = -1;
+            SaveManager.Instance?.MarkDirty();
+        }
+
+        /// <summary>slotIndex에 장착된 SkillDefinition을 반환합니다. 빈 슬롯이면 null.</summary>
+        public SkillDefinition GetEquippedSkill(int slotIndex)
+        {
+            if (slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return null;
+            int skillIdx = equippedSlots[slotIndex];
+            if (skillIdx < 0 || skillIdx >= allSkills.Count) return null;
+            return allSkills[skillIdx];
+        }
+
+        // ─────────────────────────────────────────
+        //  스킬 실행 (쿨타임 체크 포함)
+        // ─────────────────────────────────────────
+
+        /// <summary>
+        /// HUD 버튼 클릭 / 키 입력 / 자동전투 AI에서 호출합니다.
+        ///
+        ///   slotIndex 0~2 : 일반 스킬 슬롯
+        ///   slotIndex 3   : 궁극기
+        ///
+        /// 쿨타임 중이면 false를 반환하고 아무것도 하지 않습니다.
+        /// </summary>
+        public bool TryUseSkill(int slotIndex)
+        {
+            if (IsDead) return false;
+
+            // ── 궁극기 ──
+            if (slotIndex == 3)
+            {
+                if (_ultimateCooldownTimer > 0f) return false;
+                if (ultimateSkill == null) return false;
+
+                UseUltimate();
+                _ultimateCooldownTimer = ultimateSkill.cooldown;
+                PlayAnimation("Attack");
+                return true;
+            }
+
+            // ── 일반 슬롯 ──
+            if (slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return false;
+            if (_slotCooldownTimers[slotIndex] > 0f) return false;
+
+            SkillDefinition skill = GetEquippedSkill(slotIndex);
+            if (skill == null) return false;
+
+            UseSkill(skill.skillIndex);
+            _slotCooldownTimers[slotIndex] = skill.cooldown;
+            PlayAnimation("Attack");
+            return true;
+        }
+
+        /// <summary>
+        /// 자동전투 AI가 쿨다운이 완료된 첫 번째 스킬을 자동으로 사용합니다.
+        /// TagCharacterController.ExecuteIdleAutoBattle()에서 평타 전에 호출하세요.
+        /// </summary>
+        /// <returns>스킬을 사용했으면 true (평타 건너뜀)</returns>
+        public bool TryAutoUseSkill()
+        {
+            for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+            {
+                if (_slotCooldownTimers[i] <= 0f && equippedSlots[i] >= 0)
+                    return TryUseSkill(i);
+            }
+            return false;
+        }
+
+        // ─────────────────────────────────────────
+        //  스킬 쿨타임 틱 (Update에서 호출)
+        // ─────────────────────────────────────────
+
+        private void TickSkillCooldowns()
+        {
+            float dt = Time.deltaTime;
+            for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+            {
+                if (_slotCooldownTimers[i] > 0f)
+                    _slotCooldownTimers[i] = Mathf.Max(0f, _slotCooldownTimers[i] - dt);
+            }
+            if (_ultimateCooldownTimer > 0f)
+                _ultimateCooldownTimer = Mathf.Max(0f, _ultimateCooldownTimer - dt);
+        }
+
+        /// <summary>슬롯의 남은 쿨타임(초). SkillButtonUI 갱신용.</summary>
+        public float GetSlotCooldownRemaining(int slotIndex)
+        {
+            if (slotIndex == 3) return _ultimateCooldownTimer;
+            if (slotIndex < 0 || slotIndex >= SKILL_SLOT_COUNT) return 0f;
+            return _slotCooldownTimers[slotIndex];
+        }
+
+        // ─────────────────────────────────────────
+        //  직업 클래스 override 진입점
+        // ─────────────────────────────────────────
+
+        /// <summary>
+        /// 실제 스킬 로직. 직업 클래스에서 switch(skillIndex)로 구현합니다.
+        /// TryUseSkill()이 쿨타임 체크 후 이 메서드를 호출합니다.
+        /// </summary>
+        public virtual void UseSkill(int skillIndex)
+        {
+            Debug.Log($"[{characterName}] UseSkill({skillIndex}) — 직업 클래스에서 override 필요");
+        }
+
+        /// <summary>
+        /// 궁극기 로직. 직업 클래스에서 override합니다.
+        /// </summary>
+        public virtual void UseUltimate()
+        {
+            Debug.Log($"[{characterName}] UseUltimate() — 직업 클래스에서 override 필요");
+        }
+
+        // ─────────────────────────────────────────
+        //  파티 유틸 (힐러/서포터 직업 클래스용)
+        // ─────────────────────────────────────────
+
+        /// <summary>파티 중 HP 비율이 가장 낮은 생존 캐릭터를 반환합니다.</summary>
+        public CharacterBase FindLowestHPAlly()
+        {
+            if (CombatManager.Instance == null) return null;
+
+            CharacterBase lowest = null;
+            float lowestRatio = float.MaxValue;
+
+            foreach (var p in CombatManager.Instance.activePlayers)
+            {
+                if (p == null || p.IsDead) continue;
+                float ratio = p.currentHealth / p.maxHealth;
+                if (ratio < lowestRatio) { lowestRatio = ratio; lowest = p; }
+            }
+            return lowest;
+        }
+
+        /// <summary>파티 전체를 회복시킵니다.</summary>
+        public void HealAllParty(float amount)
+        {
+            if (CombatManager.Instance == null) return;
+            foreach (var p in CombatManager.Instance.activePlayers)
+            {
+                if (p != null && !p.IsDead) p.Heal(amount, this);
+            }
+        }
+
+        /// <summary>파티 전체에 버프 액션을 적용합니다. (팔라딘 오라, 사제 궁극기 등)</summary>
+        public void ApplyPartyBuff(Action<CharacterBase> buffAction)
+        {
+            if (CombatManager.Instance == null) return;
+            foreach (var p in CombatManager.Instance.activePlayers)
+            {
+                if (p != null && !p.IsDead) buffAction?.Invoke(p);
+            }
+        }
+
+        // ─────────────────────────────────────────
+        //  SaveManager 연동 (장착 슬롯 복원)
+        // ─────────────────────────────────────────
+
+        /// <summary>SaveManager.ApplySaveData()에서 저장된 슬롯 배열을 복원합니다.</summary>
+        public void RestoreEquippedSlots(int[] savedSlots)
+        {
+            if (savedSlots == null || savedSlots.Length != SKILL_SLOT_COUNT) return;
+
+            for (int i = 0; i < SKILL_SLOT_COUNT; i++)
+            {
+                int idx = savedSlots[i];
+                equippedSlots[i] = (idx >= 0 && idx < allSkills.Count) ? idx : -1;
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════
         //  성장 시스템
         // ═══════════════════════════════════════════════════════════
 
@@ -134,6 +437,9 @@ namespace BossRaid.Combat
             baseStat             = 15,
             statIncreasePerLevel = 3
         };
+
+        [Header("전투 속성")]
+        public float baseAttackCooldown = 1.0f;
 
         /// <summary>현재 공격력 (StatUpgrade 성장치 반영)</summary>
         public float baseAttackPower => attackPowerUpgrade.CurrentStat;
@@ -162,6 +468,8 @@ namespace BossRaid.Combat
         {
             if (_isCurrentTarget && !IsDead)
                 aggroDuration += Time.deltaTime;
+
+            TickSkillCooldowns();
         }
 
         /// <summary>전투 시작 또는 씬 로드 시 호출. HP를 최대치로 초기화합니다.</summary>
@@ -208,7 +516,7 @@ namespace BossRaid.Combat
         /// </summary>
         protected virtual float CalculateDamageReduction(float incomingDamage)
         {
-            return incomingDamage * damageReductionMultiplier;
+            return incomingDamage;
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -237,7 +545,7 @@ namespace BossRaid.Combat
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// CombatManager.ReviveAllPlayers() 또는 Revive सर्विस에서 호출합니다.
+        /// CombatManager.ReviveAllPlayers() 또는 ReviveService에서 호출합니다.
         /// </summary>
         /// <param name="hpRatio">최대 HP 대비 부활 체력 비율 (기본 50%)</param>
         public void Revive(float hpRatio = 0.5f)
@@ -322,8 +630,11 @@ namespace BossRaid.Combat
         /// <summary>
         /// 보스에게 데미지를 주고 어그로와 딜 통계를 동시에 누적합니다.
         /// TagCharacterController.ExecuteIdleAutoBattle()에서 이 메서드를 사용하세요.
+        ///
+        /// 기존 코드:  currentBoss.TakeDamage(characterBase.baseAttackPower);
+        /// 교체 후:    characterBase.DealDamageTo(currentBoss, characterBase.baseAttackPower);
         /// </summary>
-        public void DealDamageTo(BossAI boss, float damage)
+        public void DealDamageTo(Boss.IBossPatternHandler boss, float damage)
         {
             if (IsDead || boss == null) return;
 
@@ -333,88 +644,23 @@ namespace BossRaid.Combat
         }
 
         /// <summary>
-        /// 스킬 사용 (등반 레이드 모드).
-        /// 직업 클래스에서 override하여 실제 스킬 이펙트를 구현하세요.
+        /// TagCharacterController (레이드 모드) 호환용.
+        /// targetBoss를 설정하고 슬롯 0번 스킬을 실행합니다.
         /// </summary>
-        public virtual void UseSkill(int idx)
+        public void UseSkill(int skillIndex, BossAI boss)
         {
-            if (IsDead) return;
-            PlayAnimation("Attack");
-            Debug.Log($"[{characterName}] 스킬 {idx}번 (베이스 — 직업 클래스에서 override 필요)");
-        }
-
-        public virtual void UseUltimate()
-        {
-            if (IsDead) return;
-            PlayAnimation("Attack");
-            Debug.Log($"[{characterName}] 궁극기 사용 (베이스 — 직업 클래스에서 override 필요)");
-        }
-
-        public void TryUseSkill(int index)
-        {
-            UseSkill(index);
-        }
-
-        public void TryUseUltimate()
-        {
-            UseUltimate();
-        }
-
-        // ═══════════════════════════════════════════════════════════
-        //  유틸리티 (파티 연동)
-        // ═══════════════════════════════════════════════════════════
-
-        /// <summary>パーティ 전체에게 회복을 적용합니다. Priest/Druid 궁극기용</summary>
-        public void HealAllParty(float amount)
-        {
-            ApplyPartyBuff(ally => ally.Heal(amount, this));
-        }
-
-        /// <summary>파티 중 현재 체력 비율이 가장 낮은 아군을 찾습니다.</summary>
-        public CharacterBase FindLowestHPAlly()
-        {
-            if (CombatManager.Instance == null) return this;
-            
-            CharacterBase lowest = this;
-            float lowestRatio = currentHealth / maxHealth;
-
-            foreach (var ally in CombatManager.Instance.activePlayers)
-            {
-                if (ally != null && !ally.IsDead)
-                {
-                    float ratio = ally.currentHealth / ally.maxHealth;
-                    if (ratio < lowestRatio)
-                    {
-                        lowestRatio = ratio;
-                        lowest = ally;
-                    }
-                }
-            }
-            return lowest;
-        }
-
-        /// <summary>파티원 전체에게 특정 효과(델리게이트)를 적용합니다.</summary>
-        public void ApplyPartyBuff(System.Action<CharacterBase> action)
-        {
-            if (CombatManager.Instance == null)
-            {
-                action?.Invoke(this);
-                return;
-            }
-
-            foreach (var ally in CombatManager.Instance.activePlayers)
-            {
-                if (ally != null && !ally.IsDead)
-                {
-                    action?.Invoke(ally);
-                }
-            }
+            targetBoss = boss;
+            TryUseSkill(skillIndex); // skillIndex를 슬롯 인덱스로 해석
         }
 
         // ═══════════════════════════════════════════════════════════
         //  애니메이션
         // ═══════════════════════════════════════════════════════════
 
+        /// <summary>
+        /// SPUM 등 Animator 트리거를 안전하게 실행합니다.
+        /// 사망 상태에서는 "Die" 트리거 외 모두 무시합니다.
+        /// </summary>
         public void PlayAnimation(string triggerName)
         {
             if (_animator == null) return;
@@ -440,9 +686,32 @@ namespace BossRaid.Combat
                 InGameHUDController.Instance.UpdateLocalPlayerHP(_currentHealth, maxHealth);
         }
 
+        // ═══════════════════════════════════════════════════════════
+        //  강화 (UI 버튼 연결용)
+        // ═══════════════════════════════════════════════════════════
+
         public void OnClickUpgradeAttackPower()
         {
             attackPowerUpgrade.TryUpgrade();
         }
+
+        // ═══════════════════════════════════════════════════════════
+        //  에디터 테스트 유틸 (ContextMenu)
+        // ═══════════════════════════════════════════════════════════
+
+        [ContextMenu("Test Take Damage (200)")]
+        private void TestTakeDamage() => TakeDamage(200f);
+
+        [ContextMenu("Test Heal (300)")]
+        private void TestHeal() => Heal(300f);
+
+        [ContextMenu("Test Kill")]
+        private void TestDie() => TakeDamage(maxHealth * 10f);
+
+        [ContextMenu("Test Revive")]
+        private void TestRevive() => Revive();
+
+        [ContextMenu("Test Invulnerable (3s)")]
+        private void TestInvul() => SetInvulnerable(3f);
     }
 }

@@ -15,8 +15,10 @@ namespace BossRaid.Combat.Boss
     /// ■ 페이즈: 50% 이하 → 격노(에너지 재생 2배), 20% 이하 → 3페이즈(지속 DoT + DPS 체크)
     /// ■ 카운터(차단): Magmaburst(1.5초), Hellfire(4.5초) 시전 중 차단 가능
     /// </summary>
-    public class BossAI : MonoBehaviour
+    public class BossAI : MonoBehaviour, IBossPatternHandler
     {
+        public string GetBossName() => bossName;
+        public bool IsCasting() => isCasting;
         [Header("Boss Stats")]
         public string bossName = "Belthazar, Lord of Flame";
         public float maxHealth = 50000f;

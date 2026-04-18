@@ -8,66 +8,62 @@ namespace BossRaid.Combat.Classes
         protected override void Awake()
         {
             base.Awake();
-            role = CharacterRole.RangedDPS;
+            role          = CharacterRole.RangedDPS;
             characterName = "마법사";
-            
-            // 기초 스탯
-            maxHealth = 800f; 
-            currentHealth = maxHealth;
-            autoAttackDamage = 60f; 
-            attackSpeed = 1.5f; // 가장 느림. 하지만 한방이 쎔
-            attackRange = 6.0f; // 최대 사거리
-            
-            skillNames = new string[] { "메테오 낙하", "", "" };
-            skillCooldowns = new float[] { 6f, 0f, 0f }; 
-            
-            ultimateName = "타임 프리즈 (시간 정지)";
-            ultimateCooldown = 25f; 
+            maxHealth     = 800f;
+            autoAttackDamage = 60f;
+            attackSpeed   = 1.5f;
+            attackRange   = 6.0f;
+
+            RegisterSkills(
+                new SkillDefinition("메테오 낙하",   6f, 0,
+                    desc: "화면 전체 공격력 3.5배 광역 피해"),
+                new SkillDefinition("마법 화살",     2f, 1,
+                    desc: "단일 타겟 공격력 1.5배 즉발"),
+                new SkillDefinition("마법 폭발",    10f, 2,
+                    desc: "보스 주변 광역 공격력 2배 + 넉백")
+            );
+            RegisterUltimate(new SkillDefinition("타임 프리즈", 25f, 0, ultimate: true,
+                desc: "3초간 보스 행동 완전 정지 + 공격력 8배 추가 피해"));
         }
 
         public override void UseSkill(int idx)
         {
-            if (idx == 0) // 일반기: 메테오 낙하 (맵 전체 광역 청소용)
+            switch (idx)
             {
-                float damage = autoAttackDamage * 3.5f; 
+                case 0: // 메테오 낙하
+                    float metDmg = autoAttackDamage * 3.5f;
+                    if (targetBoss != null) DealDamageTo(targetBoss, metDmg);
+                    Debug.Log($"<color=red>[마법사] 메테오! {metDmg:F0} 광역 피해</color>");
+                    break;
 
-                Debug.Log($"<color=red>[마법사] 메테오 낙하! 화면 전체에 {damage} 화염 피해!</color>");
-                
-                // 보스에게 적용
-                if (targetBoss != null) 
-                { 
-                    targetBoss.TakeDamage(damage); 
-                }
-                
-                // TODO: StageManager 화면 안의 모든 몹에게 광역 피해를 주는 로직 연동
+                case 1: // 마법 화살
+                    float arrDmg = autoAttackDamage * 1.5f;
+                    if (targetBoss != null) DealDamageTo(targetBoss, arrDmg);
+                    Debug.Log($"[마법사] 마법 화살 {arrDmg:F0}");
+                    break;
+
+                case 2: // 마법 폭발
+                    float expDmg = autoAttackDamage * 2f;
+                    if (targetBoss != null) DealDamageTo(targetBoss, expDmg);
+                    Debug.Log($"<color=orange>[마법사] 마법 폭발! {expDmg:F0}</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            Debug.Log($"<color=cyan>[마법사] 시간 정지! 3초간 보스의 모든 행동을 멈춥니다!</color>");
-            
-            // 레이드 기믹: 타임 프리즈 
-            if (targetBoss != null)
-            {
-                // 보스의 코루틴 및 애니메이션을 일시 정지 (예시 로직)
-                StartCoroutine(TimeFreezeRoutine());
-            }
+            if (targetBoss != null) StartCoroutine(TimeFreezeRoutine());
+            Debug.Log("<color=cyan>[마법사] 타임 프리즈! 3초 정지!</color>");
         }
 
         private IEnumerator TimeFreezeRoutine()
         {
-            if (targetBoss != null)
-            {
-                // 약간의 꼼수: 보스를 스턴 상태로 만듭니다
-                targetBoss.isStaggered = true; 
-                // 메테오 후기 데미지
-                targetBoss.TakeDamage(autoAttackDamage * 8f);
-                
-                yield return new WaitForSeconds(3.0f);
-                
-                if (targetBoss != null) targetBoss.isStaggered = false;
-            }
+            var boss = targetBoss as Boss.BossAI;
+            if (boss != null) boss.isStaggered = true;
+            DealDamageTo(targetBoss, autoAttackDamage * 8f);
+            yield return new WaitForSeconds(3.0f);
+            if (boss != null) boss.isStaggered = false;
         }
     }
 }

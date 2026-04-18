@@ -14,7 +14,7 @@ namespace BossRaid.Combat
     {
         [Header("References")]
         public CharacterBase characterBase;
-        private BossAI currentBoss;
+        private Boss.IBossPatternHandler currentBoss;
         private InGameHUDController inGameHUD;
 
         [Header("State")]
@@ -33,6 +33,7 @@ namespace BossRaid.Combat
         public float followDistance = 3f;
         public float attackRange = 2f;
         private float lastAIAttackTime;
+        private string lastAnim;
 
         private void Awake()
         {
@@ -42,7 +43,7 @@ namespace BossRaid.Combat
 
         private void Start()
         {
-            inGameHUD = FindObjectOfType<InGameHUDController>();
+            inGameHUD = InGameHUDController.Instance;
             FindBoss();
         }
 
@@ -69,7 +70,20 @@ namespace BossRaid.Combat
         {
             if (currentBoss == null)
             {
-                currentBoss = FindObjectOfType<BossAI>();
+                // 1. 레이드 보스(BossAI) 먼저 탐색
+                var raidBoss = FindFirstObjectByType<BossAI>();
+                if (raidBoss != null)
+                {
+                    currentBoss = raidBoss;
+                    return;
+                }
+
+                // 2. 없으면 일반 몬스터(IdleBoss) 탐색
+                var idleBoss = FindFirstObjectByType<IdleBoss>();
+                if (idleBoss != null)
+                {
+                    currentBoss = idleBoss;
+                }
             }
         }
 
@@ -142,30 +156,43 @@ namespace BossRaid.Combat
         /// </summary>
         private void PartnerAIBehaviour()
         {
-            if (currentBoss == null) return;
+            var bossMonobehaviour = (currentBoss as MonoBehaviour);
+            if (bossMonobehaviour == null) { FindBoss(); return; }
+
+            float distanceToBoss = Vector3.Distance(transform.position, bossMonobehaviour.transform.position);
+            var bossCollider = bossMonobehaviour.GetComponent<Collider>();
+            if (bossCollider != null) distanceToBoss -= bossCollider.bounds.extents.magnitude * 0.4f;
+
+            float actualMoveSpeed = characterBase.movementSpeed > 0 ? characterBase.movementSpeed : moveSpeed;
 
             // 보스 주변을 맴돌며 대기 (공격은 하지 않음)
-            float distanceToBoss = Vector3.Distance(transform.position, currentBoss.transform.position);
-
             if (distanceToBoss > followDistance)
             {
-                Vector3 direction = (currentBoss.transform.position - transform.position).normalized;
+                Vector3 direction = (bossMonobehaviour.transform.position - transform.position).normalized;
                 direction.y = 0;
-                cc.Move(direction * (moveSpeed * 0.7f) * Time.deltaTime);
+                cc.Move(direction * (actualMoveSpeed * 0.7f) * Time.deltaTime);
                 
                 Quaternion targetRotation = Quaternion.LookRotation(direction);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
                 
-                characterBase.PlayAnimation("Move");
+                if (lastAnim != "Move")
+                {
+                    characterBase.PlayAnimation("Move");
+                    lastAnim = "Move";
+                }
             }
             else
             {
                 // 보스를 바라보며 대기
-                Vector3 lookDir = currentBoss.transform.position - transform.position;
+                Vector3 lookDir = bossMonobehaviour.transform.position - transform.position;
                 lookDir.y = 0;
                 transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 5f);
                 
-                characterBase.PlayAnimation("Idle");
+                if (lastAnim != "Idle")
+                {
+                    characterBase.PlayAnimation("Idle");
+                    lastAnim = "Idle";
+                }
             }
         }
 
@@ -174,55 +201,91 @@ namespace BossRaid.Combat
         /// </summary>
         private void ExecuteIdleAutoBattle()
         {
-            if (currentBoss == null)
+            var bossMonobehaviour = currentBoss as MonoBehaviour;
+            if (bossMonobehaviour == null)
             {
                 FindBoss();
                 return;
             }
 
-            float distanceToBoss = Vector3.Distance(transform.position, currentBoss.transform.position);
+            // 거리 계산 최적화: 보스의 중심점이 아니라, 덩치(콜라이더)를 빼서 가장자리까지의 거리를 측정해야 무한 걷기 버그가 발생하지 않음.
+            float distanceToBoss = Vector3.Distance(transform.position, bossMonobehaviour.transform.position);
+            var bossCollider = bossMonobehaviour.GetComponent<Collider>();
+            if (bossCollider != null)
+            {
+                // 보스의 덩치만큼 거리를 가깝게 판정해줍니다.
+                distanceToBoss -= bossCollider.bounds.extents.magnitude * 0.5f;
+            }
+
+            // 스탯 동기화: 컨트롤러 변수가 아니라 CharacterBase(SO 데이터)를 우선적으로 사용
+            float actualAttackRange = characterBase.attackRange > 0 ? characterBase.attackRange : attackRange;
+            float actualMoveSpeed   = characterBase.movementSpeed > 0 ? characterBase.movementSpeed : moveSpeed;
 
             // 1. 보스가 사거리보다 멀면 다가감
-            if (distanceToBoss > attackRange)
+            if (distanceToBoss > actualAttackRange)
             {
-                Vector3 direction = (currentBoss.transform.position - transform.position).normalized;
+                var bossObj = (currentBoss as MonoBehaviour)?.gameObject;
+                if (bossObj == null) return;
+
+                Vector3 direction = (bossObj.transform.position - transform.position).normalized;
                 direction.y = 0;
                 
                 // CharacterController를 이용한 이동
-                cc.Move(direction * moveSpeed * Time.deltaTime);
+                cc.Move(direction * actualMoveSpeed * Time.deltaTime);
                 
                 // 보스 방향으로 회전
                 Quaternion targetRotation = Quaternion.LookRotation(direction);
                 transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
                 
-                characterBase.PlayAnimation("Move");
-            }
-            // 2. 사거리 내에 들어오면 자동 공격 수행
-            else
-            {
-                // 보스 바라보기
-                Vector3 lookDir = currentBoss.transform.position - transform.position;
-                lookDir.y = 0;
-                transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 15f);
-
-                // 쿨타임 체크 (기본 평타 및 스킬 자동 캐스팅)
-                if (Time.time >= lastAIAttackTime + characterBase.baseAttackCooldown)
+                if (lastAnim != "Move")
                 {
-                    // TODO: 나중에 장착된 2개의 스킬(EquippedSkills)의 쿨타임을 먼저 체크하고 
-                    // 사용 가능한 스킬이 있으면 스킬 시전, 없으면 평타(기본 공격) 시전하는 로직으로 발전시킬 수 있습니다.
-                    
-                    characterBase.PlayAnimation("Attack"); // SPUM 등의 공격 애니메이션 호출
-                    
-                    // 보스에게 데미지 적용
-                    characterBase.DealDamageTo(currentBoss, characterBase.baseAttackPower);
-                    
-                    lastAIAttackTime = Time.time;
+                    characterBase.PlayAnimation("Move");
+                    lastAnim = "Move";
                 }
+            }
+                // 2. 사거리 내에 들어오면 자동 공격 수행
                 else
                 {
-                    characterBase.PlayAnimation("Idle");
+                    var bossObj = bossMonobehaviour.gameObject;
+
+                    // 보스 바라보기
+                    Vector3 lookDir = bossObj.transform.position - transform.position;
+                    lookDir.y = 0;
+                    if (lookDir.sqrMagnitude > 0.01f)
+                        transform.rotation = Quaternion.Slerp(transform.rotation, Quaternion.LookRotation(lookDir), Time.deltaTime * 15f);
+
+                    // 스킬 자동 시전 체크
+                    characterBase.targetBoss = currentBoss;
+                    bool skillCasted = characterBase.TryAutoUseSkill();
+                    
+                    if (skillCasted) 
+                    {
+                        lastAIAttackTime = Time.time;
+                        lastAnim = "Attack";
+                    }
+
+                    // 스킬을 안 썼고, 평타 쿨타임(attackSpeed)이 찼다면 평타 시전
+                    if (!skillCasted && Time.time >= lastAIAttackTime + characterBase.attackSpeed)
+                    {
+                        characterBase.PlayAnimation("Attack"); 
+                        lastAnim = "Attack";
+                        
+                        characterBase.DealDamageTo(currentBoss, characterBase.autoAttackDamage);
+                        lastAIAttackTime = Time.time;
+                        // Debug.Log($"<color=white>[AI] {characterBase.characterName} 평타 공격!</color>");
+                    }
+                    else if (!skillCasted && lastAnim != "Idle" && lastAnim != "Attack") 
+                    {
+                        characterBase.PlayAnimation("Idle");
+                        lastAnim = "Idle";
+                    }
+                    
+                    // 공격 애니메이션이 끝났을 것으로 예상되는 시점에 상태 리셋 (애니메이터 상태 전이 보조)
+                    if (lastAnim == "Attack" && Time.time > lastAIAttackTime + 0.5f)
+                    {
+                        lastAnim = ""; // 다음 프레임에 Idle이나 다른 애니메이션을 잡을 수 있도록 초기화
+                    }
                 }
             }
-        }
     }
 }

@@ -13,9 +13,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 1000f; currentHealth = maxHealth;
             characterName = "냉기 마법사";
             attackRange = 10f; autoAttackDamage = 35f; attackSpeed = 1.3f;
-            skillNames = new string[] { "얼음창", "얼음 화살", "얼음 보호막" };
-            skillCooldowns = new float[] { 15f, 4f, 18f };
-            ultimateName = "얼음 덩어리"; ultimateCooldown = 60f;
+            RegisterSkills(
+                new SkillDefinition("얼음창", 15f, 0, interrupt: true, desc: "관통 피해 + 1초 빙결 + 차단"),
+                new SkillDefinition("얼음 화살", 4f, 1, desc: "피해 + 둔화"),
+                new SkillDefinition("얼음 보호막", 18f, 2, desc: "8초 피해 흡수")
+            );
+            RegisterUltimate(new SkillDefinition("얼음 덩어리", 60f, 0, ultimate: true, desc: "5초 무적"));
         }
 
         public override void UseSkill(int idx)
@@ -45,10 +48,9 @@ namespace BossRaid.Combat.Classes
 
         private IEnumerator IceBlock()
         {
-            isInvulnerable = true;
+            SetInvulnerable(5f);
             movementSpeed = 0f;
             yield return new WaitForSeconds(5f);
-            isInvulnerable = false;
             movementSpeed = 5f;
         }
     }

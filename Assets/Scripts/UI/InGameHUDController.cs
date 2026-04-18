@@ -252,7 +252,7 @@ namespace BossRaid.UI
         {
             if (localPlayer != null)
             {
-                localPlayer.TryUseUltimate();
+                localPlayer.TryUseSkill(3);
                 Debug.Log("[HUD] Ultimate used!");
             }
         }

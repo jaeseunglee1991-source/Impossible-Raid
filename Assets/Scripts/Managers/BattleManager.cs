@@ -19,8 +19,8 @@ namespace BossRaid.Managers
         public static BattleManager Instance { get; private set; }
 
         [Header("State Settings")]
-        [Tooltip("체크하면 방치형 4인 모드, 해제하면 기존 레이드 태그 모드")]
-        public bool isIdleFarmingMode = true; // 나중에 StageManager.CurrentState 등으로 대체 가능
+        [Tooltip("StageManager의 전역 상태를 참조하여 모드를 결정합니다.")]
+        public bool IsIdleFarmingMode => StageManager.Instance != null && StageManager.Instance.CurrentState == GameState.IdleFarming;
 
         [Header("Character Prefabs")]
         public GameObject warriorPrefab;
@@ -59,7 +59,7 @@ namespace BossRaid.Managers
 
         private void Start()
         {
-            inGameHUD = FindObjectOfType<InGameHUDController>();
+            inGameHUD = InGameHUDController.Instance;
             
             // 게임 시작 시 전투 초기화 (또는 다른 매니저에서 호출)
             InitializeBattle();
@@ -72,7 +72,7 @@ namespace BossRaid.Managers
         {
             ClearBattlefield();
 
-            if (isIdleFarmingMode)
+            if (IsIdleFarmingMode)
             {
                 SetupIdleFarmingMode();
             }
@@ -199,41 +199,68 @@ namespace BossRaid.Managers
         // ====================================================================================
 
         /// <summary>
-        /// (기존 로직 유지용) 캐릭터 교체
+        /// 태그 시스템: 현재 조작 캐릭터를 교체합니다.
         /// </summary>
         public void SwapCharacters(TagCharacterController outChar, TagCharacterController inChar)
         {
-            if (isIdleFarmingMode) return; // 방치형 모드에서는 태그 불가능
+            if (IsIdleFarmingMode) return; // 방치형 모드에서는 태그 불가능
 
-            // TODO: 기존 캐릭터 교체 로직 유지 (카메라 타겟 변경, 컨트롤 권한 인계 등)
+            if (outChar == null || inChar == null) return;
+            if (inChar.characterBase != null && inChar.characterBase.IsDead) return; // 죽은 캐릭터로 교체 불가
+
+            // 1. 기존 캐릭터: 수동 조작 해제 → 파트너 AI로 전환
+            outChar.isPlayerControlled = false;
+            outChar.EnableIdleAIMode(false);
+
+            // 2. 신규 캐릭터: 수동 조작 권한 획득
+            inChar.isPlayerControlled = true;
+            inChar.EnableIdleAIMode(false);
+
+            // 3. HUD 업데이트 (로컬 플레이어 변경)
+            if (InGameHUDController.Instance != null && inChar.characterBase != null)
+            {
+                InGameHUDController.Instance.localPlayer = inChar.characterBase;
+            }
+
+            Debug.Log($"[BattleManager] 태그! {outChar.characterBase?.characterName} → {inChar.characterBase?.characterName}");
         }
 
         /// <summary>
-        /// (기존 로직 유지용) 파티 전멸 및 실패 처리
+        /// 파티 전멸 판정. 모두 사망하면 StageManager에 실패를 통보합니다.
         /// </summary>
         public void CheckGameOver()
         {
-            if (isIdleFarmingMode) return; // 방치형 모드에서는 전멸보다는 샌드백 타격 위주이므로 로직 제외 가능
+            if (IsIdleFarmingMode) return;
 
             bool isAllDead = ActiveCharacters.All(c => c.characterBase != null && c.characterBase.IsDead);
             if (isAllDead)
             {
-                Debug.Log("[BattleManager] 파티 전멸! 레이드 실패.");
-                // TODO: ResultManager 혹은 UIManager 호출하여 부활/실패 팝업 띄우기
+                Debug.Log("<color=red>[BattleManager] 파티 전멸! 레이드 실패.</color>");
+                
+                // StageManager에 실패 통보 → 방치형 파밍으로 롤백
+                if (StageManager.Instance != null)
+                {
+                    StageManager.Instance.OnBossFailed();
+                }
             }
         }
 
         /// <summary>
-        /// (기존 로직 유지용) 유료 재화를 소모하여 1회 부활
+        /// 죽은 파티원 전원을 부활시키고 전투를 재개합니다.
         /// </summary>
         public void ReviveParty()
         {
-            // TODO: 죽은 캐릭터들의 HP를 회복하고 애니메이션 초기화 후 다시 전투 재개
-            Debug.Log("[BattleManager] 파티 부활 처리");
+            Debug.Log("<color=cyan>[BattleManager] 파티 부활 처리</color>");
             foreach (var controller in ActiveCharacters)
             {
-                // controller.characterBase.Revive(); 
+                if (controller.characterBase != null && controller.characterBase.IsDead)
+                {
+                    controller.characterBase.Revive(0.5f); // 50% 체력으로 부활
+                }
             }
+            
+            // 부활 후 전투 재개
+            StartAllCombat();
         }
     }
 }

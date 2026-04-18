@@ -15,9 +15,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 2000f; currentHealth = maxHealth;
             characterName = "죽음의 기사";
             attackRange = 3f; autoAttackDamage = 50f; attackSpeed = 1.5f;
-            skillNames = new string[] { "죽음의 손아귀", "죽음의 일격", "뼈 보호막" };
-            skillCooldowns = new float[] { 12f, 6f, 15f };
-            ultimateName = "사자의 군대"; ultimateCooldown = 75f;
+            RegisterSkills(
+                new SkillDefinition("죽음의 손아귀", 12f, 0, interrupt: true, desc: "마법 피해 + 끌어당기기 + 차단 + 어그로"),
+                new SkillDefinition("죽음의 일격", 6f, 1, desc: "피해 + 50% 흡혈"),
+                new SkillDefinition("뼈 보호막", 15f, 2, desc: "3회 공격 방어")
+            );
+            RegisterUltimate(new SkillDefinition("사자의 군대", 75f, 0, ultimate: true, desc: "구울 소환"));
         }
 
         public override void UseSkill(int idx)

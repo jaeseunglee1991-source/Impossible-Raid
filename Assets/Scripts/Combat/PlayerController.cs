@@ -94,7 +94,7 @@ namespace BossRaid.Combat.Player
 
         private IEnumerator PerformDash()
         {
-            if (characterInfo != null) characterInfo.isInvulnerable = true;
+            if (characterInfo != null) characterInfo.SetInvulnerable(0.5f);
             Debug.Log("[Combat] Dashing! Invulnerable for 0.5s.");
 
             // 2D 대시: XY 방향 사용
@@ -107,10 +107,8 @@ namespace BossRaid.Combat.Player
                                       * (dashDistance / dashDuration) * Time.deltaTime;
                 yield return null;
             }
-
-            if (characterInfo != null) characterInfo.isInvulnerable = false;
         }
 
-        public bool IsInvulnerable() => characterInfo != null && characterInfo.isInvulnerable;
+        public bool IsInvulnerable() => characterInfo != null && characterInfo.CheckInvulnerable();
     }
 }

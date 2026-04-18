@@ -10,63 +10,75 @@ namespace BossRaid.Combat.Classes
         protected override void Awake()
         {
             base.Awake();
-            role = CharacterRole.MeleeDPS;
+            role          = CharacterRole.MeleeDPS;
             characterName = "도적";
-            
-            // 기초 스탯 (공속이 빠름)
-            maxHealth = 1200f; 
-            currentHealth = maxHealth;
-            autoAttackDamage = 40f; 
-            attackSpeed = 0.5f; // 방치형 특화 엄청 빠른 공속
-            attackRange = 2.5f;
-            
-            skillNames = new string[] { "수리검 난사", "", "" };
-            skillCooldowns = new float[] { 4f, 0f, 0f }; 
-            
-            ultimateName = "그림자 회피 (무적 폭딜)";
-            ultimateCooldown = 12f; 
+            maxHealth     = 1200f;
+            autoAttackDamage = 40f;
+            attackSpeed   = 0.5f;
+            attackRange   = 2.5f;
+
+            RegisterSkills(
+                new SkillDefinition("수리검 난사",   4f, 0,
+                    desc: "공격력 1.5배 투사체. 다음 공격 강화 중이면 2배"),
+                new SkillDefinition("독 발라치기",   8f, 1,
+                    desc: "보스에게 5초간 DoT (초당 공격력 50%)"),
+                new SkillDefinition("그림자 도약",   6f, 2,
+                    desc: "보스 뒤로 순간이동 후 공격력 3배 기습")
+            );
+            RegisterUltimate(new SkillDefinition("그림자 회피", 12f, 0, ultimate: true,
+                desc: "1초 무적 + 회피 후 다음 공격력 2배"));
         }
 
         public override void UseSkill(int idx)
         {
-            if (idx == 0) // 일반기: 수리검 난사
+            switch (idx)
             {
-                float damage = autoAttackDamage * 1.5f; 
-                if (_isNextAttackBoosted) { damage *= 2f; _isNextAttackBoosted = false; }
+                case 0: // 수리검 난사
+                    float dmg = autoAttackDamage * 1.5f;
+                    if (_isNextAttackBoosted) { dmg *= 2f; _isNextAttackBoosted = false; }
+                    if (targetBoss != null) DealDamageTo(targetBoss, dmg);
+                    Debug.Log($"<color=purple>[도적] 수리검 난사! {dmg:F0} 피해</color>");
+                    break;
 
-                Debug.Log($"<color=purple>[도적] 수리검 난사! 투투툭! ({damage} 피해)</color>");
-                
-                if (targetBoss != null) 
-                { 
-                    targetBoss.TakeDamage(damage); 
-                }
-                // TODO: 전방의 다수 몹에게 타격 추가
+                case 1: // 독 발라치기
+                    if (targetBoss != null) StartCoroutine(PoisonDot());
+                    Debug.Log("<color=green>[도적] 독 발라치기! 5초 DoT 시작</color>");
+                    break;
+
+                case 2: // 그림자 도약
+                    float backstab = autoAttackDamage * 3f;
+                    if (targetBoss != null) DealDamageTo(targetBoss, backstab);
+                    Debug.Log($"<color=purple>[도적] 그림자 도약! 기습 {backstab:F0} 피해</color>");
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            Debug.Log($"<color=gray>[도적] 그림자 회피! 1초간 완벽한 무적 상태 돌입. 다음 공격력 2배 증가!</color>");
-            
-            // 레이드 기믹: 일시적 완벽한 무적 (보스 즉사기 회피용)
             StartCoroutine(DodgeRoutine());
+            Debug.Log("<color=gray>[도적] 그림자 회피! 1초 무적 + 다음 공격 2배!</color>");
+        }
+
+        private IEnumerator PoisonDot()
+        {
+            float tickDmg = autoAttackDamage * 0.5f;
+            for (int i = 0; i < 5; i++)
+            {
+                yield return new WaitForSeconds(1f);
+                if (targetBoss != null) DealDamageTo(targetBoss, tickDmg);
+            }
         }
 
         private IEnumerator DodgeRoutine()
         {
-            isInvulnerable = true;
-            yield return new WaitForSeconds(1.0f); // 1초 무적 닷지
-            isInvulnerable = false;
-            
-            // 회피 성공 시 다음 스킬 데미지 증가 (버프)
+            SetInvulnerable(1.0f);
+            yield return new WaitForSeconds(1.0f);
             _isNextAttackBoosted = true;
-            
             if (targetBoss != null)
             {
-                // 보스에게 회피 직후 카운터 단일 데미지
-                float counterDamage = autoAttackDamage * 5f;
-                targetBoss.TakeDamage(counterDamage);
-                Debug.Log($"<color=purple>[도적] 무적 타임 후 암살 찌르기! {counterDamage} 피해!</color>");
+                float counter = autoAttackDamage * 5f;
+                DealDamageTo(targetBoss, counter);
+                Debug.Log($"<color=purple>[도적] 카운터 암살! {counter:F0} 피해</color>");
             }
         }
     }

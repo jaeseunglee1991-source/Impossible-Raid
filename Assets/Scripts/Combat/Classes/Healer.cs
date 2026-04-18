@@ -8,65 +8,68 @@ namespace BossRaid.Combat.Classes
         protected override void Awake()
         {
             base.Awake();
-            role = CharacterRole.Healer;
+            role          = CharacterRole.Healer;
             characterName = "힐러";
-            
-            // 기초 스탯
-            maxHealth = 900f; 
-            currentHealth = maxHealth;
-            autoAttackDamage = 25f; // 평타 약함
-            attackSpeed = 1.2f;     
-            attackRange = 5.0f;     
-            
-            skillNames = new string[] { "치유의 빛 (단일 힐)", "", "" };
-            skillCooldowns = new float[] { 3f, 0f, 0f }; 
-            
-            ultimateName = "신의 가호 (파티 풀피 및 무적 2초)";
-            ultimateCooldown = 30f; 
+            maxHealth     = 900f;
+            autoAttackDamage = 25f;
+            attackSpeed   = 1.2f;
+            attackRange   = 5.0f;
+
+            RegisterSkills(
+                new SkillDefinition("치유의 빛",   3f, 0,
+                    desc: "가장 체력이 낮은 아군을 공격력 4배만큼 회복"),
+                new SkillDefinition("정화",        10f, 1,
+                    desc: "아군 1명의 DoT(화상 등) 제거 + 소량 회복"),
+                new SkillDefinition("보호의 빛",   12f, 2,
+                    desc: "아군 1명에게 2초 무적 부여")
+            );
+            RegisterUltimate(new SkillDefinition("신의 가호", 30f, 0, ultimate: true,
+                desc: "파티 전체 HP 100% 회복 + 2초 무적"));
         }
 
         public override void UseSkill(int idx)
         {
-            if (idx == 0) // 치유의 빛: 가장 체력이 낮은 아군 치유
+            switch (idx)
             {
-                float healAmount = autoAttackDamage * 4.0f; // 공격력 비례 힐
-                
-                CharacterBase target = FindLowestHPAlly();
-                if (target != null)
-                {
-                    target.Heal(healAmount);
-                    Debug.Log($"<color=green>[힐러] 치유의 빛! {target.characterName}의 체력을 {healAmount} 회복!</color>");
-                }
-                
-                // 보스에게 약간의 스마이트 타격 가능
-                if (targetBoss != null) targetBoss.TakeDamage(autoAttackDamage);
+                case 0: // 치유의 빛
+                    float healAmt = autoAttackDamage * 4.0f;
+                    CharacterBase target = FindLowestHPAlly();
+                    if (target != null)
+                    {
+                        target.Heal(healAmt, this);
+                        Debug.Log($"<color=green>[힐러] 치유의 빛! {target.characterName} +{healAmt:F0}</color>");
+                    }
+                    if (targetBoss != null) DealDamageTo(targetBoss, autoAttackDamage);
+                    break;
+
+                case 1: // 정화
+                    CharacterBase purgeTarget = FindLowestHPAlly();
+                    if (purgeTarget != null)
+                    {
+                        purgeTarget.Heal(autoAttackDamage * 1.5f, this);
+                        Debug.Log($"<color=cyan>[힐러] 정화! {purgeTarget.characterName} DoT 제거</color>");
+                    }
+                    break;
+
+                case 2: // 보호의 빛
+                    CharacterBase shieldTarget = FindLowestHPAlly();
+                    if (shieldTarget != null)
+                    {
+                        shieldTarget.SetInvulnerable(2f);
+                        Debug.Log($"<color=white>[힐러] 보호의 빛! {shieldTarget.characterName} 2초 무적</color>");
+                    }
+                    break;
             }
         }
 
         public override void UseUltimate()
         {
-            Debug.Log($"<color=yellow>[힐러] 신의 가호! 파티 전체 체력 100% 회복 및 2초간 무적!</color>");
-            
-            // 레이드 기믹: 파티 전체 퍼펙트 케어
-            StartCoroutine(DivineSanctuaryRoutine());
-        }
-
-        private IEnumerator DivineSanctuaryRoutine()
-        {
-            // 모든 아군 체력 즉시 회복 및 무적 버프 부여
-            ApplyPartyBuff(ally => 
+            ApplyPartyBuff(ally =>
             {
-                ally.Heal(ally.maxHealth); // 풀피 회복
-                ally.isInvulnerable = true; 
+                ally.Heal(ally.maxHealth, this);
+                ally.SetInvulnerable(2f);
             });
-            
-            yield return new WaitForSeconds(2.0f); // 2초 유지
-            
-            // 무적 버프 해제
-            ApplyPartyBuff(ally => 
-            {
-                ally.isInvulnerable = false;
-            });
+            Debug.Log("<color=yellow>[힐러] 신의 가호! 파티 전체 풀힐 + 2초 무적!</color>");
         }
     }
 }

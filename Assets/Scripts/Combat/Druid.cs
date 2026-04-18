@@ -13,9 +13,12 @@ namespace BossRaid.Combat.Classes
             maxHealth = 1000f; currentHealth = maxHealth;
             characterName = "드루이드";
             attackRange = 10f; autoAttackDamage = 25f; attackSpeed = 1.5f;
-            skillNames = new string[] { "달빛 섬광", "재생", "쇄도의 포효" };
-            skillCooldowns = new float[] { 8f, 4f, 25f };
-            ultimateName = "평온"; ultimateCooldown = 60f;
+            RegisterSkills(
+                new SkillDefinition("달빛 섬광", 8f, 0, desc: "보스 피해 + 10초 방어력 15% 감소"),
+                new SkillDefinition("재생", 4f, 1, desc: "8초 지속 회복"),
+                new SkillDefinition("쇄도의 포효", 25f, 2, desc: "6초 이동속도 30% 증가")
+            );
+            RegisterUltimate(new SkillDefinition("평온", 60f, 0, ultimate: true, desc: "파티 전체 지속 회복"));
         }
 
         public override void UseSkill(int idx)
