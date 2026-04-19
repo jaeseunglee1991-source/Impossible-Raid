@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 3954540445042241814}
   - component: {fileID: 6555998669595742226}
+  - component: {fileID: -6587139511296663152}
   m_Layer: 0
   m_Name: DeathKnight
   m_TagString: Untagged
@@ -70,6 +71,25 @@ CapsuleCollider2D:
   m_Offset: {x: 0, y: 0}
   m_Size: {x: 0.6, y: 1}
   m_Direction: 0
+--- !u!114 &-6587139511296663152
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3758871493929914542}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
+  isPlayerControlled: 0
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!1 &5127769168376843183
 GameObject:
   m_ObjectHideFlags: 0

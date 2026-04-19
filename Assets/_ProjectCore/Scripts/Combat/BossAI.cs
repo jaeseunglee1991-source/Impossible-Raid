@@ -93,6 +93,7 @@ namespace BossRaid.Combat.Boss
             OnHealthChanged?.Invoke(currentHealth, maxHealth);
             OnEnergyChanged?.Invoke(currentEnergy, maxEnergy);
 
+            DangerZoneManager.ClearAll(); // 전투 시작 시 위험 구역 초기화
             SetupWorldUI();
 
             _patternCoroutine = StartCoroutine(BossPatternLoop());
@@ -122,6 +123,12 @@ namespace BossRaid.Combat.Boss
                 _visualPart = _animator.transform;
                 _startLocalPos = _visualPart.localPosition;
             }
+        }
+
+        private void Update()
+        {
+            // 매 프레임 위험 구역 갱신
+            DangerZoneManager.Tick(Time.deltaTime);
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -262,18 +269,31 @@ namespace BossRaid.Combat.Boss
 
             // Phase 2: 중앙 용암 장판 - 14초간 진행
             Debug.Log($"<color=magenta>[{bossName}] ★ Devouring Flames 발동! ★</color>");
-            Debug.Log($"<color=red>[System] 🔥 중앙에 거대한 용암 장판 생성! 접근 시 초당 1000 피해!</color>");
 
             float totalDuration = 14f;
             float elapsed = 0f;
-            float lavaDotTimer = 0f;        // 용암 장판 틱
-            float orbSpawnDelay = 2f;       // 2초 후 구체 스폰
-            float arcSmashDelay = 5f;       // 5초 후 호 강타
-            float chainDetonateDelay = 8f;  // 8초 후 연쇄 폭발
+            float lavaDotTimer = 0f;
+            float orbSpawnDelay = 2f;
+            float arcSmashDelay = 5f;
+            float chainDetonateDelay = 8f;
             bool orbsSpawned = false;
             bool arcSmashed = false;
             bool chainDetonated = false;
-            float lavaRange = 4f;           // 중앙 용암 장판 반경
+            float lavaRange = 4f;
+
+            // [DangerZone] 중앙 용암 장판 AI 회피용 방송
+            var lavaDanger = new DangerZone
+            {
+                id = "DevouringFlames_Lava",
+                shape = DangerShape.Circle,
+                center = _arenaCenter,
+                radius = lavaRange,
+                remainingTime = totalDuration,
+                warningTime = 0f,
+                damage = 1000f,
+                isDot = true
+            };
+            DangerZoneManager.Register(lavaDanger);
 
             while (elapsed < totalDuration && currentHealth > 0)
             {
@@ -306,26 +326,37 @@ namespace BossRaid.Combat.Boss
                 if (!arcSmashed && elapsed >= arcSmashDelay)
                 {
                     arcSmashed = true;
-                    Debug.Log($"<color=red>[{bossName}] ◆ 호 강타(Arc Smash)! 전방 부채꼴 1500 피해 + 화상!</color>");
-                    
+                    Debug.Log($"<color=red>[{bossName}] ◆ 호 강타(Arc Smash)!</color>");
+
+                    // [DangerZone] 부채꼴 장판 방송 (AI 회피 경고)
+                    Vector3 smashDir = transform.right; // 보스 우측 기준
+                    var arcDanger = new DangerZone
+                    {
+                        id = "ArcSmash",
+                        shape = DangerShape.Cone,
+                        center = transform.position,
+                        direction = smashDir,
+                        radius = 10f,
+                        angle = 90f,
+                        remainingTime = 2f,
+                        warningTime = 0f,
+                        damage = 1500f
+                    };
+                    DangerZoneManager.Register(arcDanger);
+
                     foreach (var p in activePlayers)
                     {
                         if (!p.IsDead && !p.CheckInvulnerable())
                         {
-                            // 2D 방향 판정: XY 평면에서 보스→플레이어 방향 벡터 사용
-                    Vector2 dirToPlayer = new Vector2(
-                        p.transform.position.x - transform.position.x,
-                        p.transform.position.y - transform.position.y).normalized;
-                    // 보스의 "앞" 방향: +X축(오른쪽)을 기준으로 90도 부채꼴
-                    Vector2 bossForward2D = new Vector2(1f, 0f);
-                    float angle = Vector2.Angle(bossForward2D, dirToPlayer);
-                    
-                    if (angle < 90f) // 전방 180도 부채꼴
+                            Vector2 dirToPlayer = new Vector2(
+                                p.transform.position.x - transform.position.x,
+                                p.transform.position.y - transform.position.y).normalized;
+                            Vector2 bossForward2D = new Vector2(smashDir.x, smashDir.y).normalized;
+                            float angleCheck = Vector2.Angle(bossForward2D, dirToPlayer);
+
+                            if (angleCheck < 90f)
                             {
                                 p.TakeDamage(1500f);
-                                Debug.Log($"<color=red>[호 강타] {p.characterName} 적중! (-1500)</color>");
-                                
-                                // 화상 DoT: 750 피해 / 5초 (150/초 × 5틱)
                                 StartCoroutine(ApplyBurnDot(p, 150f, 5));
                             }
                         }
@@ -336,8 +367,20 @@ namespace BossRaid.Combat.Boss
                 if (!chainDetonated && elapsed >= chainDetonateDelay)
                 {
                     chainDetonated = true;
-                    Debug.Log($"<color=red>[{bossName}] ◆ 화염 구체 연쇄 폭발! 전장 전체 800 피해!</color>");
-                    
+                    Debug.Log($"<color=red>[{bossName}] ◆ 화염 구체 연쇄 폭발!</color>");
+
+                    // [DangerZone] 전장 범위 폭발 방송
+                    var chainDanger = new DangerZone
+                    {
+                        id = "ChainDetonation",
+                        shape = DangerShape.Circle,
+                        center = _arenaCenter,
+                        radius = 15f,
+                        remainingTime = 1f,
+                        damage = 800f
+                    };
+                    DangerZoneManager.Register(chainDanger);
+
                     foreach (var p in activePlayers)
                     {
                         if (!p.IsDead && !p.CheckInvulnerable())
@@ -439,20 +482,29 @@ namespace BossRaid.Combat.Boss
         {
             Debug.Log($"<color=yellow>[{bossName}] ▶ Magmaburst 시전 시작! (1.5초 — 차단 가능)</color>");
             yield return StartCoroutine(CastPattern("Magmaburst", 1.5f, true));
-            
-            // 차단 성공 시 CastPattern 내부에서 isCasting = false 처리됨
-            // 차단 실패(시전 완료) 시에만 아래 로직 실행
-            if (!isCasting) // 차단되지 않고 시전 완료됨 (CastPattern에서 발동 후 false)
+
+            if (!isCasting)
             {
-                Debug.Log($"<color=red>[{bossName}] Magmaburst 발동! 용암 3발 낙하!</color>");
                 for (int i = 0; i < 3; i++)
                 {
                     CharacterBase target = GetTargetOutsideRange(3f);
                     if (target != null && !target.CheckInvulnerable() && !target.IsDead)
                     {
-                        yield return new WaitForSeconds(1f); // 착탄까지 1초
+                        // [DangerZone] 착탄 예정 위치에 원형 장판 방송 (1초 텔레그래프)
+                        var magmaDanger = new DangerZone
+                        {
+                            id = $"Magmaburst_{i}",
+                            shape = DangerShape.Circle,
+                            center = target.transform.position,
+                            radius = 2.5f,
+                            remainingTime = 1.5f,
+                            warningTime = 1f,
+                            damage = 750f
+                        };
+                        DangerZoneManager.Register(magmaDanger);
+
+                        yield return new WaitForSeconds(1f);
                         target.TakeDamage(750f);
-                        Debug.Log($"<color=red>[Magmaburst #{i+1}] {target.characterName} 용암 직격! (-750)</color>");
                     }
                     else yield return new WaitForSeconds(1f);
                 }
@@ -558,10 +610,23 @@ namespace BossRaid.Combat.Boss
         // ─────────────────────────────────────────
         private IEnumerator PatternFlameburst()
         {
-            Debug.Log($"<color=red>[{bossName}] ▶ Flameburst! 사방으로 화염 미사일 방사!</color>");
-            
+            Debug.Log($"<color=red>[{bossName}] ▶ Flameburst!</color>");
+
+            // [DangerZone] 근접 범위에 원형 위험 구역 방송
+            var burstDanger = new DangerZone
+            {
+                id = "Flameburst_NearRange",
+                shape = DangerShape.Circle,
+                center = transform.position,
+                radius = 4f,
+                remainingTime = 2f,
+                warningTime = 0.3f,
+                damage = 1200f
+            };
+            DangerZoneManager.Register(burstDanger);
+
             if (_animator != null) _animator.SetTrigger("AttackTrigger");
-            yield return new WaitForSeconds(0.3f); // 짧은 시전 모션
+            yield return new WaitForSeconds(0.3f);
             
             // 원작: 근접 범위일수록 위험, 다수의 미사일
             foreach (var p in activePlayers)
@@ -599,8 +664,34 @@ namespace BossRaid.Combat.Boss
         // ─────────────────────────────────────────
         private IEnumerator PatternFlameturbine()
         {
-            Debug.Log($"<color=red>[{bossName}] ▶ Flameturbine! 내/외 원형 화염구 소환! (5초 회전)</color>");
-            
+            Debug.Log($"<color=red>[{bossName}] ▶ Flameturbine!</color>");
+
+            // [DangerZone] 도넛형 회전 장판 방송 (내원 2~4m, 외원 6~8m)
+            var innerRing = new DangerZone
+            {
+                id = "Flameturbine_Inner",
+                shape = DangerShape.Donut,
+                center = transform.position,
+                innerRadius = 2f,
+                radius = 4f,
+                remainingTime = 5f,
+                damage = 750f,
+                isDot = true
+            };
+            var outerRing = new DangerZone
+            {
+                id = "Flameturbine_Outer",
+                shape = DangerShape.Donut,
+                center = transform.position,
+                innerRadius = 6f,
+                radius = 8f,
+                remainingTime = 5f,
+                damage = 750f,
+                isDot = true
+            };
+            DangerZoneManager.Register(innerRing);
+            DangerZoneManager.Register(outerRing);
+
             if (_animator != null) _animator.SetBool("Casting", true);
             
             float turbineDuration = 5f;

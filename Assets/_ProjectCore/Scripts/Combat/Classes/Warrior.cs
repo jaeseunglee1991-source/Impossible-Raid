@@ -16,38 +16,44 @@ namespace BossRaid.Combat.Classes
             autoAttackDamage = 50f;
             attackSpeed   = 1.0f;
             attackRange   = 3f;
-            threatMultiplier = 1.5f; // 탱커 어그로 배율
+            threatMultiplier = 3.0f; // 탱커: 피해의 300% 어그로
 
             RegisterSkills(
-                new SkillDefinition("회전 베기",   5f, 0,
-                    desc: "주변 적 전체에 공격력 2.5배 광역 피해"),
-                new SkillDefinition("전장의 함성", 8f, 1,
-                    desc: "자신에게 어그로 대폭 집중, 3초간 피해 경감"),
-                new SkillDefinition("방패 강타",   6f, 2, interrupt: true,
-                    desc: "보스 캐스팅 차단 + 200 피해 + 어그로 획득")
+                new SkillDefinition("도발의 일격",   4f, 0,
+                    desc: "강하게 내리쳐 공격력 2배 피해 + 어그로 대량 획득"),
+                new SkillDefinition("전술적 고함",   8f, 1,
+                    desc: "3초간 파티 전체 피해 20% 감소"),
+                new SkillDefinition("방패 강타",     6f, 2, interrupt: true,
+                    desc: "보스 캐스팅 차단 + 넉백")
             );
-            RegisterUltimate(new SkillDefinition("불굴의 도발", 15f, 0, ultimate: true,
-                desc: "5초간 피해 50% 감소 + 최대 체력 20% 보호막"));
+            RegisterUltimate(new SkillDefinition("방벽 전개", 20f, 0, ultimate: true,
+                desc: "5초간 무적에 가까운 방어(90% 감소) + 광역 도발"));
         }
 
         public override void UseSkill(int idx)
         {
+            if (targetBoss == null) return;
+
             switch (idx)
             {
-                case 0: // 회전 베기
-                    float aoe = autoAttackDamage * 2.5f;
-                    if (targetBoss != null) { DealDamageTo(targetBoss, aoe); AddThreat(aoe * 2f); }
-                    Debug.Log($"<color=orange>[전사] 회전 베기! {aoe} 광역 피해!</color>");
+                case 0: // 도발의 일격
+                    float tauntDmg = autoAttackDamage * 2.0f;
+                    DealDamageTo(targetBoss, tauntDmg);
+                    AddThreat(tauntDmg * 5f); // 추가 어그로 배율
+                    Debug.Log($"<color=orange>[전사] 도발의 일격! 어그로 폭증</color>");
                     break;
 
-                case 1: // 전장의 함성
-                    AddThreat(3000f);
-                    StartCoroutine(DefensiveCry(3f));
-                    Debug.Log("<color=yellow>[전사] 전장의 함성! 어그로 집중 + 피해 경감!</color>");
+                case 1: // 전술적 고함
+                    ApplyPartyBuff(ally => {
+                        // 간단한 버프 로직 (실제로는 버프 관리 클래스가 필요하지만 여기선 즉시 처리)
+                        StartCoroutine(AllyProtection(ally, 3f));
+                    });
+                    Debug.Log("<color=yellow>[전사] 전술적 고함! 파티 방어력 증강</color>");
                     break;
 
                 case 2: // 방패 강타 (차단)
-                    if (targetBoss != null) { DealDamageTo(targetBoss, 200f); targetBoss.Interrupt(); AddThreat(500f); }
+                    DealDamageTo(targetBoss, 100f);
+                    targetBoss.Interrupt();
                     Debug.Log("<color=blue>[전사] 방패 강타! 차단 성공!</color>");
                     break;
             }
@@ -55,24 +61,28 @@ namespace BossRaid.Combat.Classes
 
         public override void UseUltimate()
         {
-            shieldAmount += maxHealth * 0.2f;
-            StartCoroutine(DamageReductionBuff(5f));
-            if (targetBoss != null) { targetBoss.Interrupt(); AddThreat(5000f); }
-            Debug.Log("<color=yellow>[전사] 불굴의 도발! 5초간 피해 50% 감소!</color>");
+            if (targetBoss == null) return;
+
+            StartCoroutine(ShieldWallDuration(5f));
+            AddThreat(10000f);
+            targetBoss.Interrupt();
+            Debug.Log("<color=red>[전사] 궁극기: 방벽 전개! 5초간 철벽 방어</color>");
         }
 
-        private IEnumerator DamageReductionBuff(float duration)
+        private IEnumerator AllyProtection(CharacterBase ally, float duration)
         {
-            damageReductionMultiplier = 0.5f;
+            float prevRed = ally.damageReductionMultiplier;
+            ally.damageReductionMultiplier = 0.8f; // 20% 감소
             yield return new WaitForSeconds(duration);
-            damageReductionMultiplier = 1.0f;
+            ally.damageReductionMultiplier = prevRed;
         }
 
-        private IEnumerator DefensiveCry(float duration)
+        private IEnumerator ShieldWallDuration(float duration)
         {
-            damageReductionMultiplier = 0.7f;
+            float prevRed = damageReductionMultiplier;
+            damageReductionMultiplier = 0.1f; // 90% 감소
             yield return new WaitForSeconds(duration);
-            damageReductionMultiplier = 1.0f;
+            damageReductionMultiplier = prevRed;
         }
 
         protected override float CalculateDamageReduction(float incoming)

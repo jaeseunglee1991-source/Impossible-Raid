@@ -38,7 +38,11 @@ namespace BossRaid.UI
         public Button settingsButton;
         public Button scoreButton;
         public Button giveUpButton;   // 새 버튼 추가
+        public Button inventoryButton; // 인벤토리 버튼 추가
         public TextMeshProUGUI lifeText;
+
+        [Header("Inventory")]
+        public InventoryUIController inventoryUI;
 
         [Header("Settings Panel")]
         public GameObject settingsPanel;
@@ -66,6 +70,32 @@ namespace BossRaid.UI
 
         private void Start()
         {
+            if (Instance == null)
+            {
+                Instance = this;
+            }
+            else
+            {
+                Destroy(gameObject);
+                return;
+            }
+
+            // 성장(업그레이드) UI 컨트롤러 자동 할당 (없으면 자동 생성)
+            if (FindAnyObjectByType<GrowthUIController>() == null)
+            {
+                GameObject growthPanel = GameObject.Find("GrowthPanel");
+                if (growthPanel != null)
+                {
+                    growthPanel.AddComponent<GrowthUIController>();
+                }
+                else
+                {
+                    // GrowthPanel도 없으면 Manager 등에 붙임
+                    gameObject.AddComponent<GrowthUIController>();
+                }
+            }
+
+            // --- 기존 로직 ---
             // 수동 할당이 안된 경우 대비하여 이름으로 자동 찾기 로직 추가
             if (settingsPanel != null)
             {
@@ -82,6 +112,8 @@ namespace BossRaid.UI
             if (giveUpConfirmButton != null) giveUpConfirmButton.onClick.AddListener(ConfirmGiveUp);
             if (giveUpCancelButton != null) giveUpCancelButton.onClick.AddListener(HideGiveUpPopup);
             if (giveUpPopupPanel != null) giveUpPopupPanel.SetActive(false);
+
+            if (inventoryButton != null) inventoryButton.onClick.AddListener(ToggleInventory);
 
             ApplyHUDContainerStyling();
         }
@@ -223,7 +255,9 @@ namespace BossRaid.UI
             // ESC키 동작: 열려있는 팝업을 닫거나 설정창 열기
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
-                if (giveUpPopupPanel != null && giveUpPopupPanel.activeSelf)
+                if (inventoryUI != null && inventoryUI.inventoryPanel != null && inventoryUI.inventoryPanel.activeSelf)
+                    inventoryUI.CloseInventory();
+                else if (giveUpPopupPanel != null && giveUpPopupPanel.activeSelf)
                     HideGiveUpPopup();
                 else
                     ToggleSettings();
@@ -279,6 +313,22 @@ namespace BossRaid.UI
         private void ShowGiveUpPopup()
         {
             if (giveUpPopupPanel != null) giveUpPopupPanel.SetActive(true);
+        }
+
+        private void ToggleInventory()
+        {
+            if (inventoryUI != null)
+            {
+                if (inventoryUI.inventoryPanel != null && inventoryUI.inventoryPanel.activeSelf)
+                {
+                    inventoryUI.CloseInventory();
+                }
+                else
+                {
+                    string charName = localPlayer != null ? localPlayer.characterName : "";
+                    inventoryUI.OpenInventory(charName);
+                }
+            }
         }
 
         private void HideGiveUpPopup()

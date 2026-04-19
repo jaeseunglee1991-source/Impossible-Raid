@@ -82,8 +82,12 @@ namespace BossRaid.UI
             if (outerCircle != null)
             {
                 var cg = outerCircle.GetComponent<CanvasGroup>();
-                if (cg != null) cg.alpha = visible ? 1f : 0f;
-                else outerCircle.gameObject.SetActive(visible);
+                if (cg == null) cg = outerCircle.gameObject.AddComponent<CanvasGroup>();
+                
+                // 반투명 설정 (보통 게임에서 사용하는 느낌)
+                cg.alpha = visible ? 0.6f : 0f;
+                cg.interactable = visible;
+                cg.blocksRaycasts = visible;
             }
         }
     }

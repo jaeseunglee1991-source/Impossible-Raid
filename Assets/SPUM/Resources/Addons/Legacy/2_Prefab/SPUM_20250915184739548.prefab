@@ -3532,6 +3532,8 @@ GameObject:
   m_Component:
   - component: {fileID: 6171199782789740410}
   - component: {fileID: 3546004683757539514}
+  - component: {fileID: 7071277712708870960}
+  - component: {fileID: 5275968034800181080}
   m_Layer: 5
   m_Name: SPUM_20250915184739548
   m_TagString: Untagged
@@ -6597,6 +6599,37 @@ MonoBehaviour:
   DEBUFF_List: []
   DEATH_List: []
   OTHER_List: []
+--- !u!114 &7071277712708870960
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2671750967421498512}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3634d8bbe58cae4ea8683f44d465b13, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.SPUMAnimationBridge
+--- !u!114 &5275968034800181080
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2671750967421498512}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 775ee41414246a944b0e534d9a1e2f5d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BossRaid.Combat.TagCharacterController
+  characterBase: {fileID: 0}
+  isPlayerControlled: 0
+  isCombatActive: 0
+  isIdleAIMode: 0
+  moveSpeed: 5
+  followDistance: 3
+  attackRange: 2
 --- !u!1 &2869217252480015535
 GameObject:
   m_ObjectHideFlags: 0

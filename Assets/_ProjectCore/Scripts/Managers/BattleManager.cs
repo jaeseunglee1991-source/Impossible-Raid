@@ -72,6 +72,9 @@ namespace BossRaid.Managers
         {
             ClearBattlefield();
 
+            // ── 전투 지원 시스템 자동 생성 (씬에 없으면 자동 추가) ──
+            EnsureCombatSystems();
+
             if (IsIdleFarmingMode)
             {
                 SetupIdleFarmingMode();
@@ -79,6 +82,29 @@ namespace BossRaid.Managers
             else
             {
                 SetupBossRaidMode();
+            }
+        }
+
+        /// <summary>VFXPool, DangerZoneVisualizer 등 전투 지원 시스템을 자동으로 보장합니다.</summary>
+        private void EnsureCombatSystems()
+        {
+            // DangerZone 초기화
+            DangerZoneManager.ClearAll();
+
+            // SkillVFXPool 자동 생성
+            if (SkillVFXPool.Instance == null)
+            {
+                var poolObj = new GameObject("[SkillVFXPool]");
+                poolObj.AddComponent<SkillVFXPool>();
+                Debug.Log("[BattleManager] SkillVFXPool 자동 생성 완료");
+            }
+
+            // DangerZoneVisualizer 자동 생성
+            if (DangerZoneVisualizer.Instance == null)
+            {
+                var vizObj = new GameObject("[DangerZoneVisualizer]");
+                vizObj.AddComponent<DangerZoneVisualizer>();
+                Debug.Log("[BattleManager] DangerZoneVisualizer 자동 생성 완료");
             }
         }
 
@@ -150,27 +176,46 @@ namespace BossRaid.Managers
 
         /// <summary>
         /// 캐릭터 프리팹을 스폰하고 상태를 초기화합니다.
+        /// [자동 복구] 컴포넌트가 누락된 경우 런타임에 자동으로 추가합니다.
         /// </summary>
         private void SpawnCharacter(GameObject prefab, Vector3 position, bool isIdleMode)
         {
-            if (prefab == null) 
-            {
-                Debug.LogError("[BattleManager] 스폰하려는 캐릭터 프리팹이 NULL입니다!");
-                return;
-            }
+            if (prefab == null) return;
 
             GameObject charObj = Instantiate(prefab, position, Quaternion.identity);
-            TagCharacterController controller = charObj.GetComponent<TagCharacterController>();
             
+            // [순서 수정] 데이터 클래스(CharacterBase)를 먼저 추가하여 AI가 즉시 참조할 수 있게 함
+            EnsureClassComponent(charObj, prefab.name);
+
+            if (charObj.GetComponent<SPUMAnimationBridge>() == null) charObj.AddComponent<SPUMAnimationBridge>();
+            
+            TagCharacterController controller = charObj.GetComponent<TagCharacterController>();
+            if (controller == null) controller = charObj.AddComponent<TagCharacterController>();
+
             if (controller != null)
             {
                 controller.EnableIdleAIMode(isIdleMode);
                 ActiveCharacters.Add(controller);
-                Debug.Log($"[BattleManager] {prefab.name} 스폰 성공 및 컨트롤러 연결 완료.");
+                
+                // 생성 직후 강제 초기화 호출 (Missing 참조 방지)
+                controller.ManualInit();
+                Debug.Log($"[BattleManager] {charObj.name} 자동 복구 및 초기화 완료.");
             }
+        }
+
+        private void EnsureClassComponent(GameObject obj, string prefabName)
+        {
+            if (obj.GetComponent<CharacterBase>() != null) return;
+
+            // 프리팹 이름에 따라 적절한 클래스 추가
+            if (prefabName.Contains("Warrior")) obj.AddComponent<BossRaid.Combat.Classes.Warrior>();
+            else if (prefabName.Contains("Mage")) obj.AddComponent<BossRaid.Combat.Classes.Mage>();
+            else if (prefabName.Contains("Rogue")) obj.AddComponent<BossRaid.Combat.Classes.Rogue>();
+            else if (prefabName.Contains("Healer")) obj.AddComponent<BossRaid.Combat.Classes.Healer>();
             else
             {
-                Debug.LogError($"[BattleManager] {charObj.name} 프리팹에 'TagCharacterController' 컴포넌트가 없습니다! 스크립트가 누락되었거나 이름이 바뀌었는지 확인하세요.");
+                // 기본값으로 전사 할당 (로그 방지용)
+                obj.AddComponent<BossRaid.Combat.Classes.Warrior>();
             }
         }
 
@@ -254,6 +299,31 @@ namespace BossRaid.Managers
         }
 
         /// <summary>
+        /// 특정 캐릭터를 조종 대상으로 설정하고 나머지는 자동 AI로 전환합니다.
+        /// </summary>
+        public void SetControlledCharacter(TagCharacterController target)
+        {
+            foreach (var controller in ActiveCharacters)
+            {
+                if (controller == target)
+                {
+                    controller.isPlayerControlled = true;
+                    controller.EnableIdleAIMode(false);
+                    
+                    // HUD 타겟팅 변경
+                    if (inGameHUD != null) inGameHUD.localPlayer = controller.characterBase;
+                }
+                else
+                {
+                    controller.isPlayerControlled = false;
+                    controller.EnableIdleAIMode(true); // 나머지는 자동 사냥
+                }
+            }
+            
+            Debug.Log($"[BattleManager] 조종 캐릭터 변경: {target.characterBase?.characterName}");
+        }
+
+        /// <summary>
         /// 죽은 파티원 전원을 부활시키고 전투를 재개합니다.
         /// </summary>
         public void ReviveParty()
@@ -267,7 +337,7 @@ namespace BossRaid.Managers
                 }
             }
             
-            // 부활 후 전투 재개
+            // 부활 후 전투 재개 (기존 모드 유지)
             StartAllCombat();
         }
     }

@@ -55,13 +55,44 @@ namespace BossRaid.Managers
             // 보스 레이드 시스템 비활성화
             if (BossRaidSystem != null) BossRaidSystem.SetActive(false);
 
-            // 방치형 잡몹 스포너 활성화
-            if (IdleMobSpawner != null) IdleMobSpawner.SetActive(true);
-
-            // TODO: 플레이어 파티의 수동 조작 UI (Q,W) 비활성화 & 전원 AI 루프 위임
-            // BattleManager의 태그 기능도 잠금 처리
+            // 방치형 잡몹 스포너 활성화 및 자동 컴포넌트 추가
+            if (IdleMobSpawner != null)
+            {
+                IdleMobSpawner.SetActive(true);
+                if (IdleMobSpawner.GetComponent<IdleEnemySpawner>() == null)
+                {
+                    var spawner = IdleMobSpawner.AddComponent<IdleEnemySpawner>();
+                    // 기본 소환 포인트가 없다면 스포너 자신의 위치를 사용
+                    spawner.spawnPoints = new[] { IdleMobSpawner.transform };
+                    
+                    // 프리팹은 BattleManager에서 쓰던 것들을 빌려오거나 수동 할당 필요
+                    if (BattleManager.Instance != null)
+                    {
+                        spawner.enemyPrefabs = new[] { BattleManager.Instance.warriorPrefab }; // 임시로 우리 캐릭터 프리팹을 적군으로 소환해서 테스트
+                    }
+                }
+            }
             
+            UpdateStageUI();
             Debug.Log($"<color=green>[StageManager] 제 {CurrentStageLevel} 스테이지 - 방치형 파밍 시작 (필요 잡몹: {MobsRequiredForBoss})</color>");
+        }
+
+        /// <summary>
+        /// 상단 HUD의 스테이지 및 잡몹 진행도를 갱신합니다.
+        /// </summary>
+        public void UpdateStageUI()
+        {
+            if (InGameHUDController.Instance != null && InGameHUDController.Instance.timerText != null)
+            {
+                // [Premium] 타이머 대신 스테이지 정보를 출력 (방치형 모드)
+                string status = $"스테이지 {CurrentStageLevel} - 잡몹 <color=yellow>{MobsKilledInStage}</color>/{MobsRequiredForBoss}";
+                
+                // 50마리 다 채웠을 때 강조
+                if (MobsKilledInStage >= MobsRequiredForBoss)
+                    status = $"스테이지 {CurrentStageLevel} - <color=#FFD700>보스 도전 가능!</color>";
+
+                InGameHUDController.Instance.timerText.text = status;
+            }
         }
 
         // ──────────────────────────────────────────────
@@ -72,10 +103,19 @@ namespace BossRaid.Managers
             if (CurrentState != GameState.IdleFarming) return;
 
             MobsKilledInStage++;
-            GrowthManager.Instance.AddGold(goldReward); // 킬 보상
+            UpdateStageUI(); // UI 즉시 갱신 (이 위의 코드는 절대 실패하지 않음)
 
-            // 장비 드랍 시도 (1% 확률)
-            InventoryManager.Instance?.TryDrop(CurrentStageLevel);
+            // 골드는 IdleBoss.Die()에서 이미 AddGold()로 처리됨 → 이중 지급 방지
+
+            // 장비 드랍 시도 (1% 확률) - 안전하게 감쌈
+            try
+            {
+                InventoryManager.Instance?.TryDrop(CurrentStageLevel);
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogWarning($"[StageManager] 드랍 처리 중 오류 (무시): {e.Message}");
+            }
 
             if (MobsKilledInStage >= MobsRequiredForBoss)
             {
@@ -142,15 +182,32 @@ namespace BossRaid.Managers
         // 4. 보스 클리어 및 롤백 (실패 시)
         // ──────────────────────────────────────────────
         /// <summary>보스 클리어 성공 시 호출</summary>
-        public void OnBossDefeated()
+        public async void OnBossDefeated()
         {
-            Debug.Log($"<color=cyan>[StageManager] 보스 처치 완료! 다음 스테이지로 넘어갑니다.</color>");
+            Debug.Log($"<color=cyan>[StageManager] 보스 처치! 서버 동기화를 대기합니다...</color>");
+
+            // 서버 응답이 실패하면 돈 복사 방지를 위해 스테이지를 넘기지 않음
+            bool isSuccess = true;
+            if (GrowthManager.Instance != null)
+            {
+                isSuccess = await GrowthManager.Instance.ClaimBossRewardFromServer(CurrentStageLevel);
+            }
+
+            if (!isSuccess)
+            {
+                Debug.LogError("<color=red>[StageManager] 보스 보상 획득 실패 (네트워크 오류). 다음 스테이지 진입이 취소됩니다.</color>");
+                OnBossFailed();
+                return;
+            }
+
+            Debug.Log($"<color=cyan>[StageManager] 서버 동기화 완료! 다음 스테이지로 넘어갑니다.</color>");
 
             // 보스 확정 드랍 (최소 Rare 보장)
             InventoryManager.Instance?.DropFromBoss(CurrentStageLevel);
 
             CurrentStageLevel++;
             MobsKilledInStage = 0;
+            UpdateStageUI();
 
             // 보상 및 다음 스테이지 파밍 전환
             StartCoroutine(ReturnToFarmState(true));

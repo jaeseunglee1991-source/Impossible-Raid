@@ -6,7 +6,7 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/LoginScene.unity
+    path: Assets/_ProjectCore/Scenes/Scenes/LoginScene.unity
     guid: a48bf8ad229b95e4196f32ee122b7ddd
   - enabled: 1
     path: Assets/Scenes/LobbyScene.unity
@@ -15,7 +15,7 @@ EditorBuildSettings:
     path: Assets/Scenes/WaitingRoomScene.unity
     guid: d5ce83dc7c191ce4eb2478cbda4a3397
   - enabled: 1
-    path: Assets/Scenes/InGameScene.unity
+    path: Assets/_ProjectCore/Scenes/Scenes/InGameScene.unity
     guid: fdcbc20302ff564459d022789280d216
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

@@ -51,12 +51,30 @@ namespace BossRaid.Combat
         public float damageReductionMultiplier = 1.0f; // 피해 감소 배율 (0.7 = 30% 경감)
         public float shieldAmount            = 0f;     // 현재 흡수 가능한 쉴드량
 
+        [Header("스킬 이펙트")]
+        [Tooltip("스킬명→VFX 매핑 데이터베이스 (없으면 이펙트 없이 동작)")]
+        public SkillVFXDatabase skillVFXDatabase;
+
         // ═══════════════════════════════════════════════════════════
         //  체력 (HP)
         // ═══════════════════════════════════════════════════════════
 
         [Header("체력")]
-        public float maxHealth = 1000f;
+        [Tooltip("최대 체력을 관리하는 성장 정보")]
+        public StatUpgrade maxHpUpgrade = new StatUpgrade()
+        {
+            statName             = "최대 체력",
+            baseCost             = 10,
+            costMultiplier       = 1.15,
+            baseStat             = 1000,
+            statIncreasePerLevel = 250 // 레벨당 250 증가
+        };
+
+        public float maxHealth 
+        {
+            get => maxHpUpgrade.CurrentStat;
+            set => maxHpUpgrade.baseStat = value - (maxHpUpgrade.currentLevel - 1) * maxHpUpgrade.statIncreasePerLevel;
+        }
 
         [Tooltip("현재 체력 — 인스펙터에서 실시간 확인 가능")]
         [SerializeField] private float _currentHealth;
@@ -290,6 +308,7 @@ namespace BossRaid.Combat
 
                 UseUltimate();
                 _ultimateCooldownTimer = ultimateSkill.cooldown;
+                _lastUsedSkillName = ultimateSkill.skillName;
                 PlayAnimation("Attack");
                 return true;
             }
@@ -303,6 +322,7 @@ namespace BossRaid.Combat
 
             UseSkill(skill.skillIndex);
             _slotCooldownTimers[slotIndex] = skill.cooldown;
+            _lastUsedSkillName = skill.skillName;
             PlayAnimation("Attack");
             return true;
         }
@@ -448,8 +468,8 @@ namespace BossRaid.Combat
         //  내부 레퍼런스
         // ═══════════════════════════════════════════════════════════
 
+        private ICharacterAnimationHandler _animHandler;
         private Animator     _animator;
-        private SPUM_Prefabs _spumPrefab;
         private Rigidbody    _rb;
 
         // ═══════════════════════════════════════════════════════════
@@ -458,8 +478,8 @@ namespace BossRaid.Combat
 
         protected virtual void Awake()
         {
+            _animHandler = GetComponent<ICharacterAnimationHandler>();
             _animator = GetComponentInChildren<Animator>();
-            _spumPrefab = GetComponentInChildren<SPUM_Prefabs>();
             _rb = GetComponent<Rigidbody>();
         }
 
@@ -583,7 +603,10 @@ namespace BossRaid.Combat
             float actual  = currentHealth - before; // 오버힐 제외
 
             if (healer != null)
+            {
                 healer.totalHealingDone += actual;
+                healer.AddThreat(actual); // 치유량에 따른 어그로 발생
+            }
 
             Debug.Log($"[{characterName}] 회복 +{actual:F0}  HP: {currentHealth:F0}/{maxHealth:F0}");
         }
@@ -645,7 +668,18 @@ namespace BossRaid.Combat
             boss.TakeDamage(damage);
             totalDamageDealt += damage;
             AddThreat(damage);
+
+            // VFX 자동 재생 (마지막 사용 스킬의 이펙트)
+            if (skillVFXDatabase != null && _lastUsedSkillName != null)
+            {
+                Transform bossTransform = (boss as MonoBehaviour)?.transform;
+                skillVFXDatabase.PlaySkillVFX(_lastUsedSkillName, transform, bossTransform);
+                _lastUsedSkillName = null; // 1회성
+            }
         }
+
+        // VFX 연동용: 마지막으로 시전한 스킬 이름
+        private string _lastUsedSkillName;
 
         /// <summary>
         /// TagCharacterController (레이드 모드) 호환용.
@@ -662,42 +696,37 @@ namespace BossRaid.Combat
         // ═══════════════════════════════════════════════════════════
 
         /// <summary>
-        /// SPUM 및 일반 Animator를 지원합니다.
+        /// 인터페이스 기반 애니메이션 실행 (SPUM, 일반 Animator 등 호환)
         /// </summary>
         public void PlayAnimation(string triggerName, int index = 0)
         {
-            if (_animator == null) return;
             if (IsDead && triggerName != "Die") return;
 
-            // SPUM 컴포넌트가 있는 경우
-            if (_spumPrefab != null)
+            // [보완] 처음에 못 찾았더라도 실행 시점에 다시 한번 체크 (BattleManager 자가치유 대응)
+            if (_animHandler == null) _animHandler = GetComponent<ICharacterAnimationHandler>();
+            if (_animator == null) _animator = GetComponentInChildren<Animator>();
+
+            // 1. 전용 핸들러(브릿지)가 있으면 우선 사용
+            if (_animHandler != null)
             {
-                PlayerState state = PlayerState.IDLE;
-                switch (triggerName.ToUpper())
-                {
-                    case "IDLE":   state = PlayerState.IDLE; break;
-                    case "MOVE":   state = PlayerState.MOVE; break;
-                    case "ATTACK": state = PlayerState.ATTACK; break;
-                    case "HIT":    state = PlayerState.DAMAGED; break;
-                    case "DIE":    state = PlayerState.DEATH; break;
-                    default:       state = PlayerState.OTHER; break;
-                }
-                _spumPrefab.PlayAnimation(state, index);
+                _animHandler.PlayAnimation(triggerName, index);
                 return;
             }
 
-            // 일반 애니메이터 방식 보강
-            _animator.ResetTrigger("Idle");
-            _animator.ResetTrigger("Move");
-            _animator.ResetTrigger("Attack");
-            _animator.ResetTrigger("Hit");
-            _animator.ResetTrigger("Die");
+            // 2. 핸들러가 없으면 일반 Animator 폴백
+            if (_animator != null)
+            {
+                _animator.ResetTrigger("Idle");
+                _animator.ResetTrigger("Move");
+                _animator.ResetTrigger("Attack");
+                _animator.ResetTrigger("Hit");
+                _animator.ResetTrigger("Die");
 
-            // SPUM 파라미터 직접 호환성 (Bool 필드)
-            if (triggerName == "Move") _animator.SetBool("1_Move", true);
-            else if (triggerName == "Idle") _animator.SetBool("1_Move", false);
+                if (triggerName == "Move") _animator.SetBool("1_Move", true);
+                else if (triggerName == "Idle") _animator.SetBool("1_Move", false);
 
-            _animator.SetTrigger(triggerName);
+                _animator.SetTrigger(triggerName);
+            }
         }
 
         // ═══════════════════════════════════════════════════════════

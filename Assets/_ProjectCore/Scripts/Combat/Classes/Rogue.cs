@@ -5,8 +5,6 @@ namespace BossRaid.Combat.Classes
 {
     public class Rogue : CharacterBase
     {
-        private bool _isNextAttackBoosted = false;
-
         protected override void Awake()
         {
             base.Awake();
@@ -16,70 +14,76 @@ namespace BossRaid.Combat.Classes
             autoAttackDamage = 40f;
             attackSpeed   = 0.5f;
             attackRange   = 2.5f;
+            threatMultiplier = 0.5f; // 도적: 피해의 50% 어그로 (어그로 감소)
 
             RegisterSkills(
-                new SkillDefinition("수리검 난사",   4f, 0,
-                    desc: "공격력 1.5배 투사체. 다음 공격 강화 중이면 2배"),
-                new SkillDefinition("독 발라치기",   8f, 1,
-                    desc: "보스에게 5초간 DoT (초당 공격력 50%)"),
-                new SkillDefinition("그림자 도약",   6f, 2,
-                    desc: "보스 뒤로 순간이동 후 공격력 3배 기습")
+                new SkillDefinition("암살",           5f, 0,
+                    desc: "보스 뒤로 이동하여 공격력 4배 피해"),
+                new SkillDefinition("독침 투척",       3f, 1,
+                    desc: "단일 1.5배 피해 + 3초간 받는 피해 10% 증가"),
+                new SkillDefinition("은신",           10f, 2,
+                    desc: "3초간 타겟팅 제외 + 다음 공격력 2배")
             );
-            RegisterUltimate(new SkillDefinition("그림자 회피", 12f, 0, ultimate: true,
-                desc: "1초 무적 + 회피 후 다음 공격력 2배"));
+            RegisterUltimate(new SkillDefinition("그림자 춤", 25f, 0, ultimate: true,
+                desc: "보스 2초 기절 + 총 공격력 10배 폭발적 연타"));
         }
 
         public override void UseSkill(int idx)
         {
+            if (targetBoss == null) return;
+
+            // [패시브] 보스 시전 중에는 기본 데미지 2배 (DealDamageTo 내부에서 처리하거나 여기서 보정)
+            float passiveMult = targetBoss.IsCasting() ? 2.0f : 1.0f;
+
             switch (idx)
             {
-                case 0: // 수리검 난사
-                    float dmg = autoAttackDamage * 1.5f;
-                    if (_isNextAttackBoosted) { dmg *= 2f; _isNextAttackBoosted = false; }
-                    if (targetBoss != null) DealDamageTo(targetBoss, dmg);
-                    Debug.Log($"<color=purple>[도적] 수리검 난사! {dmg:F0} 피해</color>");
+                case 0: // 암살
+                    float assassinDmg = autoAttackDamage * 4.0f * passiveMult;
+                    // 보스 뒤로 위치 이동 (심플하게 연출)
+                    transform.position = (targetBoss as MonoBehaviour).transform.position - (targetBoss as MonoBehaviour).transform.forward * 1.5f;
+                    DealDamageTo(targetBoss, assassinDmg);
+                    Debug.Log($"<color=purple>[도적] 암살! {assassinDmg} 피해 (시전중 보너스: {passiveMult}x)</color>");
                     break;
 
-                case 1: // 독 발라치기
-                    if (targetBoss != null) StartCoroutine(PoisonDot());
-                    Debug.Log("<color=green>[도적] 독 발라치기! 5초 DoT 시작</color>");
+                case 1: // 독침 투척
+                    DealDamageTo(targetBoss, autoAttackDamage * 1.5f * passiveMult);
+                    // 방어력 감소 디버프 (기능 확장을 위해 로그만 남김)
+                    Debug.Log($"<color=green>[도적] 독침 투척!</color>");
                     break;
 
-                case 2: // 그림자 도약
-                    float backstab = autoAttackDamage * 3f;
-                    if (targetBoss != null) DealDamageTo(targetBoss, backstab);
-                    Debug.Log($"<color=purple>[도적] 그림자 도약! 기습 {backstab:F0} 피해</color>");
+                case 2: // 은신
+                    StartCoroutine(StealthRoutine(3f));
+                    Debug.Log("<color=gray>[도적] 은신 발동!</color>");
                     break;
             }
         }
 
         public override void UseUltimate()
         {
-            StartCoroutine(DodgeRoutine());
-            Debug.Log("<color=gray>[도적] 그림자 회피! 1초 무적 + 다음 공격 2배!</color>");
+            if (targetBoss == null) return;
+
+            targetBoss.Interrupt(); // 차단 겸 기절
+            var bossAI = targetBoss as Boss.BossAI;
+            if (bossAI != null) StartCoroutine(StunBoss(bossAI, 2f));
+            
+            float ultDmg = autoAttackDamage * 10.0f;
+            DealDamageTo(targetBoss, ultDmg);
+            Debug.Log("<color=red>[도적] 궁극기: 그림자 춤! 보스 무력화 및 폭딜</color>");
         }
 
-        private IEnumerator PoisonDot()
+        private IEnumerator StealthRoutine(float duration)
         {
-            float tickDmg = autoAttackDamage * 0.5f;
-            for (int i = 0; i < 5; i++)
-            {
-                yield return new WaitForSeconds(1f);
-                if (targetBoss != null) DealDamageTo(targetBoss, tickDmg);
-            }
+            float prevThreat = threatMultiplier;
+            threatMultiplier = 0f; // 타겟팅 완전 해제
+            yield return new WaitForSeconds(duration);
+            threatMultiplier = prevThreat;
         }
 
-        private IEnumerator DodgeRoutine()
+        private IEnumerator StunBoss(Boss.BossAI boss, float duration)
         {
-            SetInvulnerable(1.0f);
-            yield return new WaitForSeconds(1.0f);
-            _isNextAttackBoosted = true;
-            if (targetBoss != null)
-            {
-                float counter = autoAttackDamage * 5f;
-                DealDamageTo(targetBoss, counter);
-                Debug.Log($"<color=purple>[도적] 카운터 암살! {counter:F0} 피해</color>");
-            }
+            boss.isStaggered = true;
+            yield return new WaitForSeconds(duration);
+            boss.isStaggered = false;
         }
     }
 }

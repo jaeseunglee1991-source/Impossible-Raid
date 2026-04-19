@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System;
 using UnityEngine;
@@ -156,12 +156,34 @@ public class SPUM_Prefabs : MonoBehaviour
     }
     public void PlayAnimation(PlayerState PlayState, int index){
         Animator animator = _anim;
-        //Debug.Log(PlayState.ToString());
-        var animations =  StateAnimationPairs[PlayState.ToString()];
-        //Debug.Log(OverrideController[PlayState.ToString()].name);
-        OverrideController[PlayState.ToString()] = animations[index];
-        //Debug.Log( OverrideController[PlayState.ToString()].name);
-        var StateStr = PlayState.ToString();
+        if (animator == null) return;
+
+        string stateText = PlayState.ToString();
+
+        // [방어 코드] 딕셔너리 키 존재 여부 확인
+        if (!StateAnimationPairs.ContainsKey(stateText)) 
+        {
+            Debug.LogWarning($"[SPUM] State {stateText} not found in StateAnimationPairs.");
+            return;
+        }
+
+        var animations = StateAnimationPairs[stateText];
+
+        // [방어 코드] 리스트 및 인덱스 유효성 확인
+        if (animations == null || animations.Count == 0 || index < 0 || index >= animations.Count)
+        {
+            // Debug.LogWarning($"[SPUM] Animation index {index} invalid for state {stateText}.");
+            // 인덱스 0이라도 있으면 사용, 없으면 리턴
+            if (animations != null && animations.Count > 0) index = 0;
+            else return;
+        }
+
+        if (OverrideController != null && animations[index] != null)
+        {
+            OverrideController[stateText] = animations[index];
+        }
+
+        var StateStr = stateText;
    
         bool isMove = StateStr.Contains("MOVE");
         bool isDebuff = StateStr.Contains("DEBUFF");

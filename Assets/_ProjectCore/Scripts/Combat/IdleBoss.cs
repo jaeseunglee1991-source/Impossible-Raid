@@ -28,14 +28,17 @@ namespace BossRaid.Combat.Boss
         public float currentCastProgress = 0f;
         public bool canBeInterrupted = true;
 
+        [Header("Spawner")]
+        [HideInInspector] public bool isSpawnedMinion = false; // 스포너가 생성한 잡몹 여부
+
+        private ICharacterAnimationHandler animHandler;
         private Animator animator;
-        private SPUM_Prefabs spumPrefab;
         private Collider bossCollider;
 
         private void Awake()
         {
+            animHandler = GetComponent<ICharacterAnimationHandler>();
             animator = GetComponentInChildren<Animator>();
-            spumPrefab = GetComponentInChildren<SPUM_Prefabs>();
             bossCollider = GetComponent<Collider>();
             if (bossCollider == null) bossCollider = GetComponentInChildren<Collider>();
         }
@@ -49,16 +52,27 @@ namespace BossRaid.Combat.Boss
             if (bossCollider != null) bossCollider.enabled = true;
             nextRewardHpThreshold = 0.99f; 
 
-            if (animator != null)
-            {
-                animator.Rebind();
-                animator.SetTrigger("Idle");
-            }
+            PlayBossAnimation("Idle");
 
             // 패턴 루프 시작
             if (_patternCoroutine != null) StopCoroutine(_patternCoroutine);
             _patternCoroutine = StartCoroutine(BossPatternLoop());
             StartCoroutine(AutoAttackLoop());
+        }
+
+        // 공통 애니메이션 실행 헬퍼
+        private void PlayBossAnimation(string stateName, int index = 0)
+        {
+            if (animHandler != null)
+            {
+                animHandler.PlayAnimation(stateName, index);
+                return;
+            }
+
+            if (animator != null)
+            {
+                animator.SetTrigger(stateName);
+            }
         }
 
         public void TakeDamage(float damage)
@@ -70,12 +84,14 @@ namespace BossRaid.Combat.Boss
 
             float currentHpPercent = currentHP / maxHP;
 
-            // 1% 깎일 때마다 타격감(UI)을 위해 가짜 보상만 지급 (서버 통신 안함)
+            // 1% 깎일 때마다 타격감(UI)을 위해 보상 지급
             while (currentHpPercent <= nextRewardHpThreshold && nextRewardHpThreshold >= 0f)
             {
-                if (GrowthManager.Instance != null)
+                if (GrowthManager.Instance != null && StageManager.Instance != null)
                 {
-                    GrowthManager.Instance.AddFakeGold(goldPerOnePercent);
+                    // 공식 기반의 보스 보상에서 1% 분량만 쪼개서 지급
+                    double bossGold = GrowthManager.Instance.CalculateBossGold(StageManager.Instance.CurrentStageLevel);
+                    GrowthManager.Instance.AddGold(bossGold * 0.01);
                 }
                 nextRewardHpThreshold -= 0.01f;
             }
@@ -86,19 +102,37 @@ namespace BossRaid.Combat.Boss
             }
         }
 
-        private async void Die()
+        private void Die()
         {
             isDead = true;
             if (bossCollider != null) bossCollider.enabled = false;
-            if (animator != null) animator.SetTrigger("Die");
+            PlayBossAnimation("Die");
 
-            // [보안 핵심] 보스가 죽었을 때 딱 1번 서버와 통신하여 모든 보상을 한 번에 정산
-            if (GrowthManager.Instance != null)
+            if (isSpawnedMinion)
             {
-                await GrowthManager.Instance.ClaimBossRewardFromServer(bossLevel);
-            }
+                // ─── 잡몹 사망: 클라이언트 로컬만 처리, 서버 호출 절대 금지 ───
+                int stageLvl = StageManager.Instance != null ? StageManager.Instance.CurrentStageLevel : bossLevel;
+                double calculatedMobGold = 10.0; // 기본값
+                
+                if (GrowthManager.Instance != null)
+                    calculatedMobGold = GrowthManager.Instance.CalculateMobGold(stageLvl);
 
-            StartCoroutine(RespawnRoutine());
+                if (StageManager.Instance != null)
+                    StageManager.Instance.OnMobKilled((int)calculatedMobGold);
+
+                // GrowthManager에 로컬 골드 적립
+                if (GrowthManager.Instance != null)
+                    GrowthManager.Instance.AddGold(calculatedMobGold);
+
+                Destroy(gameObject, 1.5f);
+            }
+            else
+            {
+                // ─── 진짜 보스 사망: 서버 정산은 StageManager.OnBossDefeated()에서 처리 ───
+                // 서버 응답을 받고 나서 스테이지를 넘기는 것이 중요 (돈 복사 방지)
+                if (StageManager.Instance != null)
+                    StageManager.Instance.OnBossDefeated();
+            }
         }
 
         private IEnumerator RespawnRoutine()
@@ -121,9 +155,7 @@ namespace BossRaid.Combat.Boss
                 CharacterBase target = GetRandomTarget();
                 if (target != null)
                 {
-                    if (spumPrefab != null) spumPrefab.PlayAnimation(PlayerState.ATTACK, 0);
-                    else if (animator != null) animator.SetTrigger("AttackTrigger");
-                    
+                    PlayBossAnimation("Attack");
                     target.TakeDamage(autoAttackDamage);
                 }
                 else
@@ -213,7 +245,7 @@ namespace BossRaid.Combat.Boss
         // --- 패턴 3: Flameburst ---
         private IEnumerator PatternFlameburst()
         {
-            if (animator != null) animator.SetTrigger("AttackTrigger");
+            PlayBossAnimation("Attack");
             yield return new WaitForSeconds(0.5f);
             foreach(var p in FindObjectsByType<CharacterBase>(FindObjectsSortMode.None))
             {

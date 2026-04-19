@@ -16,6 +16,7 @@ namespace BossRaid.Combat
         public CharacterBase characterBase;
         private Boss.IBossPatternHandler currentBoss;
         private InGameHUDController inGameHUD;
+        private VirtualJoystick joystick;
 
         [Header("State")]
         public bool isPlayerControlled = false;
@@ -39,12 +40,46 @@ namespace BossRaid.Combat
         {
             characterBase = GetComponent<CharacterBase>();
             cc = GetComponent<CharacterController>();
+            if (cc == null)
+            {
+                cc = gameObject.AddComponent<CharacterController>();
+                // 2D SPUM 캐릭터에 맞춘 기본 캐릭터 컨트롤러 크기 설정
+                cc.center = new Vector3(0, 0.5f, 0);
+                cc.radius = 0.3f;
+                cc.height = 1.0f;
+            }
         }
 
         private void Start()
         {
             inGameHUD = InGameHUDController.Instance;
+            joystick = FindFirstObjectByType<VirtualJoystick>();
+            ManualInit(); // 초기 참조 연결
             FindBoss();
+        }
+
+        /// <summary>
+        /// 컴포넌트가 런타임에 추가되었을 때 수동으로 호출하여 참조를 즉시 연결합니다.
+        /// </summary>
+        public void ManualInit()
+        {
+            if (characterBase == null) characterBase = GetComponent<CharacterBase>();
+            if (cc == null) cc = GetComponent<CharacterController>();
+            if (cc == null)
+            {
+                cc = gameObject.AddComponent<CharacterController>();
+                cc.center = new Vector3(0, 0.5f, 0);
+                cc.radius = 0.3f;
+                cc.height = 1.0f;
+            }
+        }
+
+        private void OnMouseDown()
+        {
+            if (BattleManager.Instance != null && !characterBase.IsDead)
+            {
+                BattleManager.Instance.SetControlledCharacter(this);
+            }
         }
 
         public void StartCombat()
@@ -69,23 +104,25 @@ namespace BossRaid.Combat
 
         private void FindBoss()
         {
-            if (currentBoss == null)
+            // 1. 레이드 보스(BossAI) 먼저 탐색
+            var raidBoss = FindFirstObjectByType<BossAI>();
+            if (raidBoss != null)
             {
-                // 1. 레이드 보스(BossAI) 먼저 탐색
-                var raidBoss = FindFirstObjectByType<BossAI>();
-                if (raidBoss != null)
-                {
-                    currentBoss = raidBoss;
-                    return;
-                }
-
-                // 2. 없으면 일반 몬스터(IdleBoss) 탐색
-                var idleBoss = FindFirstObjectByType<IdleBoss>();
-                if (idleBoss != null)
-                {
-                    currentBoss = idleBoss;
-                }
+                currentBoss = raidBoss;
+                return;
             }
+
+            // 2. 일반 몬스터(IdleBoss) 탐색
+            var idleBoss = FindFirstObjectByType<IdleBoss>();
+            if (idleBoss != null)
+            {
+                currentBoss = idleBoss;
+                return;
+            }
+
+            // 3. [보완] 스테이지의 일반 적(Minion) 탐색 (이름 기반 또는 CharacterBase가 없는 Target 탐색 등)
+            // 현재는 IdleBoss가 잡몹 역할도 병행하므로 IdleBoss를 우선적으로 찾습니다.
+            // 만약 캐릭터들이 여전히 가만히 있다면, 몬스터에 IdleBoss 스크립트가 붙어 있는지 확인이 필요합니다.
         }
 
         private void Update()
@@ -113,20 +150,29 @@ namespace BossRaid.Combat
 
         private void HandleMovement()
         {
-            // 키보드 방향키 또는 WASD 입력
-            float h = Input.GetAxisRaw("Horizontal");
-            float v = Input.GetAxisRaw("Vertical");
+            Vector3 moveDir = Vector3.zero;
 
-            movementInput = new Vector3(h, 0f, v).normalized;
-
-            if (movementInput.magnitude > 0.1f)
+            // 1. 조이스틱 입력 체크 (우선순위 1)
+            if (joystick != null && joystick.InputDirection.sqrMagnitude > 0.01f)
             {
-                // 이동 처리
+                moveDir = new Vector3(joystick.InputDirection.x, 0f, joystick.InputDirection.y);
+            }
+            // 2. 키보드 입력 체크 (우선순위 2 - 테스트용)
+            else
+            {
+                float h = Input.GetAxisRaw("Horizontal");
+                float v = Input.GetAxisRaw("Vertical");
+                moveDir = new Vector3(h, 0f, v);
+            }
+
+            movementInput = moveDir.normalized;
+
+            if (movementInput.sqrMagnitude > 0.01f)
+            {
                 cc.Move(movementInput * moveSpeed * Time.deltaTime);
 
-                // 캐릭터 회전
                 Quaternion targetRotation = Quaternion.LookRotation(movementInput);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 15f);
 
                 characterBase.PlayAnimation("Move");
             }
@@ -223,21 +269,86 @@ namespace BossRaid.Combat
             float actualAttackRange = characterBase.attackRange > 0 ? characterBase.attackRange : attackRange;
             float actualMoveSpeed   = characterBase.movementSpeed > 0 ? characterBase.movementSpeed : moveSpeed;
 
-            // 1. 보스가 사거리보다 멀면 다가감
-            if (distanceToBoss > actualAttackRange)
+            // ═══════════════════════════════════════════════════════
+            //  위험 구역(DangerZone) 회피 AI
+            //  - 탱커는 장판을 무시하고 어그로 유지 (FF14 탱커 철학)
+            //  - 나머지 직업은 즉시 안전 지대로 이동
+            // ═══════════════════════════════════════════════════════
+            if (characterBase.role != CharacterRole.Tank)
             {
-                var bossObj = (currentBoss as MonoBehaviour)?.gameObject;
-                if (bossObj == null) return;
+                DangerZone nearestDanger;
+                if (DangerZoneManager.IsInAnyDanger(transform.position, out nearestDanger))
+                {
+                    // 탈출 방향 계산
+                    Vector3 escapeDir = nearestDanger.GetEscapeDirection(transform.position);
+                    escapeDir.y = 0;
 
-                Vector3 direction = (bossObj.transform.position - transform.position).normalized;
+                    // 회피 속도는 기본 이속의 1.5배 (긴급 회피)
+                    float escapeSpeed = actualMoveSpeed * 1.5f;
+                    cc.Move(escapeDir * escapeSpeed * Time.deltaTime);
+
+                    // 보스를 바라보면서 뒤로 빠지기
+                    Vector3 lookAtBoss = (bossMonobehaviour.transform.position - transform.position);
+                    lookAtBoss.y = 0;
+                    if (lookAtBoss.sqrMagnitude > 0.01f)
+                        transform.rotation = Quaternion.Slerp(transform.rotation,
+                            Quaternion.LookRotation(lookAtBoss.normalized), Time.deltaTime * 12f);
+
+                    if (lastAnim != "Move")
+                    {
+                        characterBase.PlayAnimation("Move");
+                        lastAnim = "Move";
+                    }
+                    return; // 회피 중에는 공격하지 않음
+                }
+            }
+
+            // ═══════════════════════════════════════════════════════
+            //  역할별 타겟 위치 결정 (포지셔닝)
+            // ═══════════════════════════════════════════════════════
+            Vector3 targetPos = bossMonobehaviour.transform.position;
+            Vector3 bossForward = bossMonobehaviour.transform.forward;
+            Vector3 bossRight = bossMonobehaviour.transform.right;
+
+            switch (characterBase.role)
+            {
+                case CharacterRole.Tank:
+                    targetPos += bossForward * 2.5f;
+                    break;
+                case CharacterRole.MeleeDPS:
+                    targetPos += (bossRight + (-bossForward)).normalized * 2.5f;
+                    break;
+                case CharacterRole.RangedDPS:
+                case CharacterRole.Healer:
+                    targetPos += (-bossForward) * 7.0f;
+                    break;
+            }
+
+            // 목표 지점 자체가 위험 구역이면 오프셋을 줘서 안전한 곳으로 보정
+            DangerZone posCheck;
+            if (characterBase.role != CharacterRole.Tank &&
+                DangerZoneManager.IsInAnyDanger(targetPos, out posCheck))
+            {
+                targetPos += posCheck.GetEscapeDirection(targetPos) * (posCheck.radius + 1f);
+            }
+
+            float distanceToTarget = Vector3.Distance(transform.position, targetPos);
+
+            // 타겟 포지션으로 이동
+            if (distanceToTarget > 0.5f)
+            {
+                Vector3 direction = (targetPos - transform.position).normalized;
                 direction.y = 0;
                 
-                // CharacterController를 이용한 이동
                 cc.Move(direction * actualMoveSpeed * Time.deltaTime);
                 
-                // 보스 방향으로 회전
-                Quaternion targetRotation = Quaternion.LookRotation(direction);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
+                Vector3 lookAtBoss2 = (bossMonobehaviour.transform.position - transform.position).normalized;
+                lookAtBoss2.y = 0;
+                if (lookAtBoss2.sqrMagnitude > 0.01f)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(lookAtBoss2);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * 10f);
+                }
                 
                 if (lastAnim != "Move")
                 {
@@ -245,7 +356,7 @@ namespace BossRaid.Combat
                     lastAnim = "Move";
                 }
             }
-                // 2. 사거리 내에 들어오면 자동 공격 수행
+                // 사거리 내에 들어오면 자동 공격 수행
                 else
                 {
                     var bossObj = bossMonobehaviour.gameObject;
@@ -264,10 +375,9 @@ namespace BossRaid.Combat
                     {
                         lastAIAttackTime = Time.time;
                         lastAnim = "Attack";
-                        Debug.Log($"[AI] {characterBase.characterName} 스킬 사용!");
                     }
 
-                    // 스킬을 안 썼고, 평타 쿨타임(attackSpeed)이 찼다면 평타 시전
+                    // 평타 쿨타임이 찼다면 평타 시전
                     if (!skillCasted && Time.time >= lastAIAttackTime + characterBase.attackSpeed)
                     {
                         characterBase.PlayAnimation("Attack"); 
@@ -275,7 +385,6 @@ namespace BossRaid.Combat
                         
                         characterBase.DealDamageTo(currentBoss, characterBase.autoAttackDamage);
                         lastAIAttackTime = Time.time;
-                        Debug.Log($"[AI] {characterBase.characterName} 평타 공격! (공격력: {characterBase.autoAttackDamage})");
                     }
                     else if (!skillCasted && lastAnim != "Idle" && lastAnim != "Attack") 
                     {
@@ -283,10 +392,9 @@ namespace BossRaid.Combat
                         lastAnim = "Idle";
                     }
                     
-                    // 공격 애니메이션이 끝났을 것으로 예상되는 시점에 상태 리셋 (애니메이터 상태 전이 보조)
                     if (lastAnim == "Attack" && Time.time > lastAIAttackTime + 0.5f)
                     {
-                        lastAnim = ""; // 다음 프레임에 Idle이나 다른 애니메이션을 잡을 수 있도록 초기화
+                        lastAnim = "";
                     }
                 }
             }

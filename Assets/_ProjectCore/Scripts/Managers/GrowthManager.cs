@@ -15,30 +15,74 @@ namespace BossRaid.Managers
 
         public event Action<double> OnGoldChanged;
 
+        // ─── 배치 저장 시스템 ───────────────────────────────────────────
+        // 잡몹 골드는 로컬에서 모아뒀다가 주기적으로 한 번만 서버에 씀
+        private double _pendingGoldToSync = 0;
+        private float _lastSyncTime = 0;
+        private const float SyncInterval = 60f; // 1분마다 한 번 서버 동기화
+
         private void Awake()
         {
             if (Instance == null) Instance = this;
             else Destroy(gameObject);
         }
 
-        /// <summary>
-        /// [가짜 보상] 보스가 1% 까일 때마다 호출되어 타격감(UI)만 올려줍니다.
-        /// 서버 통신을 하지 않으므로 랙이 전혀 없습니다.
-        /// </summary>
-        public void AddFakeGold(double amount)
+        private void Update()
         {
-            displayGold += amount;
-            OnGoldChanged?.Invoke(displayGold);
+            // 주기적 배치 저장 (잡몹 골드 누적분을 서버에 전송)
+            if (Time.time - _lastSyncTime >= SyncInterval && _pendingGoldToSync > 0)
+            {
+                _lastSyncTime = Time.time;
+                _ = FlushPendingGoldToServer();
+            }
         }
 
+        private async Task FlushPendingGoldToServer()
+        {
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
+                return;
+
+            double toSync = _pendingGoldToSync;
+            _pendingGoldToSync = 0;
+
+            try
+            {
+                var parameters = new Dictionary<string, object> { { "gold_amount", toSync } };
+                await DatabaseManager.Instance.SupabaseClient.Rpc("add_gold", parameters);
+                Debug.Log($"[GrowthManager] 배치 골드 동기화 완료: +{toSync} Gold");
+            }
+            catch (Exception e)
+            {
+                // 실패 시 롤백 (다음 사이클에 재시도)
+                _pendingGoldToSync += toSync;
+                Debug.LogWarning($"[GrowthManager] 배치 동기화 실패, 다음 주기에 재시도: {e.Message}");
+            }
+        }
+
+        // ─── 경제 밸런스 공식 ───────────────────────────────────────────
+        /// <summary>스테이지 레벨에 따른 잡몹 1마리당 골드 지급량 보정 공식 (1.15배수)</summary>
+        public double CalculateMobGold(int stageLevel)
+        {
+            double baseGold = 10f;
+            double multiplier = 1.15f;
+            return Math.Floor(baseGold * Math.Pow(multiplier, stageLevel));
+        }
+
+        /// <summary>보스는 잡몹 50마리 분량의 골드를 한방에 지급</summary>
+        public double CalculateBossGold(int stageLevel)
+        {
+            return CalculateMobGold(stageLevel) * 50.0;
+        }
+
+        // ─── Public API ─────────────────────────────────────────────────
         /// <summary>
-        /// [오프라인 보상 / 방치형 파밍 킬 보상] 골드를 더하고 저장을 예약합니다.
-        /// OfflineRewardManager.CalculateOfflineReward() 및
-        /// StageManager.OnMobKilled()에서 호출합니다.
+        /// [잡몹 킬 보상] 서버 호출 없이 로컬에만 즉시 반영.
+        /// 배치 저장 시스템이 주기적으로 서버에 씀.
         /// </summary>
         public void AddGold(double amount)
         {
             displayGold += amount;
+            _pendingGoldToSync += amount; // 나중에 서버에 쓸 누적값에 추가
             OnGoldChanged?.Invoke(displayGold);
             SaveManager.Instance?.MarkDirty();
         }
@@ -55,36 +99,43 @@ namespace BossRaid.Managers
 
         /// <summary>
         /// [진짜 보상 확정] 보스가 죽었을 때 딱 1번 호출됩니다.
+        /// 응답 실패 시 절대 스테이지를 넘기지 않음 (돈 복사 방지).
         /// </summary>
-        public async Task ClaimBossRewardFromServer(int bossLevel)
+        public async Task<bool> ClaimBossRewardFromServer(int bossLevel)
         {
+            // 오프라인/게스트 모드: 로컬 처리만 허용
+            if (DatabaseManager.Instance == null || DatabaseManager.Instance.SupabaseClient == null)
+            {
+                Debug.Log("[GrowthManager] 오프라인 모드: 보스 보상을 로컬에서만 처리합니다.");
+                double offlineReward = CalculateBossGold(bossLevel);
+                displayGold += offlineReward;
+                OnGoldChanged?.Invoke(displayGold);
+                return true;
+            }
+
             try
             {
-                var parameters = new Dictionary<string, object>
-                {
-                    { "boss_level", bossLevel }
-                };
+                // 배치 대기 중인 잡몹 골드도 보스 처치 시 함께 묶어서 정산
+                _pendingGoldToSync = 0;
 
-                // 1. 서버에 보스 처치 사실을 알림
+                var parameters = new Dictionary<string, object> { { "boss_level", bossLevel } };
                 var response = await DatabaseManager.Instance.SupabaseClient.Rpc("claim_boss_reward", parameters);
 
-                // 2. 서버가 계산을 마치고 돌려준 '진짜 골드량'을 받아옴
                 if (response != null && !string.IsNullOrEmpty(response.Content))
                 {
-                    string cleanResponse = response.Content.Replace("\"", "");
-                    double realGold = double.Parse(cleanResponse);
-
-                    // 3. 치트키로 조작된 가짜 골드를 서버의 진짜 골드로 덮어씌워 강제 교정 (Anti-Cheat)
-                    displayGold = realGold;
+                    string clean = response.Content.Replace("\"", "");
+                    double realGold = double.Parse(clean);
+                    displayGold = realGold; // 서버 기준 값으로 강제 교정 (Anti-Cheat)
                     OnGoldChanged?.Invoke(displayGold);
-
-                    Debug.Log($"[서버 동기화 완료] 보스 처치 보상 수령. 현재 진짜 재화: {displayGold} Gold");
+                    Debug.Log($"[GrowthManager] 보스 보상 서버 정산 완료: {displayGold} Gold");
+                    return true;
                 }
+                return false;
             }
             catch (Exception e)
             {
-                Debug.LogError($"[보안/네트워크 알림] 서버와 동기화 실패: {e.Message}");
-                // 실패 시 보상을 다시 요청하거나, 게임을 잠시 멈추는 등의 처리를 할 수 있습니다.
+                Debug.LogError($"[GrowthManager] 보스 보상 정산 실패: {e.Message}");
+                return false; // 실패 시 false 반환
             }
         }
 
@@ -92,9 +143,10 @@ namespace BossRaid.Managers
         {
             if (displayGold >= amount)
             {
-                // TODO: 실제 강화(소비) 시에도 서버 RPC를 호출하여 차감하는 것이 안전합니다.
                 displayGold -= amount;
                 OnGoldChanged?.Invoke(displayGold);
+                // 지출 시에도 즉시 저장
+                SaveManager.Instance?.MarkDirty();
                 return true;
             }
             return false; 

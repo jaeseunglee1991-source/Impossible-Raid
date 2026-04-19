@@ -197,8 +197,10 @@ namespace BossRaid.Managers
             {
                 string keyPrefix = character.characterName;
 
-                // CharacterBase.attackPowerUpgrade
+                // CharacterBase 업그레이드 수집
                 SaveUpgradeEntry(data, keyPrefix, character.attackPowerUpgrade);
+                SaveUpgradeEntry(data, keyPrefix, character.maxHpUpgrade);
+                
                 data.SetEquippedSlots(character.characterName, character.equippedSlots);
 
                 // 직업 클래스에 추가 StatUpgrade가 있다면 여기에 추가
@@ -299,6 +301,7 @@ namespace BossRaid.Managers
             {
                 string keyPrefix = character.characterName;
                 RestoreUpgrade(data, keyPrefix, character.attackPowerUpgrade);
+                RestoreUpgrade(data, keyPrefix, character.maxHpUpgrade);
 
                 int[] savedSlots = data.GetEquippedSlots(character.characterName);
                 if (savedSlots != null) character.RestoreEquippedSlots(savedSlots);
