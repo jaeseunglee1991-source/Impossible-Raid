@@ -52,7 +52,7 @@ namespace BossRaid.Managers
         // ═══════════════════════════════════════════════════════════
 
         public const int MAX_INVENTORY_SIZE = 60;
-        public const int GEAR_SLOTS = 3; // Weapon, Armor, Accessory
+        public const int GEAR_SLOTS = 3; // Weapon, Armor, Accessory. 로직 내부용
 
         // ═══════════════════════════════════════════════════════════
         //  인벤토리 데이터
@@ -67,11 +67,12 @@ namespace BossRaid.Managers
         public bool IsFull => _items.Count >= MAX_INVENTORY_SIZE;
 
         // ─────────────────────────────────────────
-        //  장착 슬롯 : [characterName][slotIndex] = instanceId (null = 미장착)
+        //  장착 슬롯 : [characterName][slotIndex] = instanceId (null/빈 문자열 = 미장착)
+        //  배열 대신 List 사용 (세이브 데이터 호환성 대응)
         // ─────────────────────────────────────────
 
-        private readonly Dictionary<string, string[]> _equippedGear
-            = new Dictionary<string, string[]>();
+        private readonly Dictionary<string, List<string>> _equippedGear
+            = new Dictionary<string, List<string>>();
 
         // ─────────────────────────────────────────
         //  이벤트 (UI 구독용)
@@ -126,6 +127,7 @@ namespace BossRaid.Managers
         /// <summary>instanceId로 아이템을 조회합니다.</summary>
         public EquipmentData GetItem(string instanceId)
         {
+            if (string.IsNullOrEmpty(instanceId)) return null;
             _items.TryGetValue(instanceId, out var item);
             return item;
         }
@@ -146,7 +148,7 @@ namespace BossRaid.Managers
             // 장착 중인 캐릭터 찾아 해제
             foreach (var kv in _equippedGear)
             {
-                for (int i = 0; i < GEAR_SLOTS; i++)
+                for (int i = 0; i < kv.Value.Count; i++)
                 {
                     if (kv.Value[i] == instanceId)
                     {
@@ -184,7 +186,7 @@ namespace BossRaid.Managers
 
             // 기존 장착 해제
             string prevId = _equippedGear[characterName][slotIndex];
-            if (prevId != null && _items.TryGetValue(prevId, out var prevItem))
+            if (!string.IsNullOrEmpty(prevId) && _items.TryGetValue(prevId, out var prevItem))
                 RemoveStatBonus(character, prevItem.FinalStat);
 
             // 새 장비 장착
@@ -202,14 +204,16 @@ namespace BossRaid.Managers
         public void UnequipGear(string characterName, int slotIndex)
         {
             if (!_equippedGear.TryGetValue(characterName, out var slots)) return;
+            if (slotIndex >= slots.Count) return; // 안전 검사
+
             string prevId = slots[slotIndex];
-            if (prevId == null) return;
+            if (string.IsNullOrEmpty(prevId)) return;
 
             CharacterBase character = FindCharacter(characterName);
             if (character != null && _items.TryGetValue(prevId, out var item))
                 RemoveStatBonus(character, item.FinalStat);
 
-            slots[slotIndex] = null;
+            slots[slotIndex] = string.Empty; // 빈 문자열로 초기화
             OnGearChanged?.Invoke(characterName, slotIndex, null);
             SaveManager.Instance?.MarkDirty();
         }
@@ -218,8 +222,10 @@ namespace BossRaid.Managers
         public EquipmentData GetEquippedGear(string characterName, int slotIndex)
         {
             if (!_equippedGear.TryGetValue(characterName, out var slots)) return null;
+            if (slotIndex >= slots.Count) return null; // 안전 검사
+            
             string id = slots[slotIndex];
-            return id != null ? GetItem(id) : null;
+            return !string.IsNullOrEmpty(id) ? GetItem(id) : null;
         }
 
         // ═══════════════════════════════════════════════════════════
@@ -261,7 +267,7 @@ namespace BossRaid.Managers
             // 장착 중이면 델타만큼 즉시 스탯 갱신
             foreach (var kv in _equippedGear)
             {
-                for (int i = 0; i < GEAR_SLOTS; i++)
+                for (int i = 0; i < kv.Value.Count; i++)
                 {
                     if (kv.Value[i] == instanceId)
                     {
@@ -362,7 +368,7 @@ namespace BossRaid.Managers
                 data.gearSlots.Add(new GearSlotEntry
                 {
                     characterName = kv.Key,
-                    slotIds       = (string[])kv.Value.Clone()
+                    slotIds       = new List<string>(kv.Value)
                 });
             }
         }
@@ -384,15 +390,20 @@ namespace BossRaid.Managers
             foreach (var entry in data.gearSlots)
             {
                 EnsureGearSlots(entry.characterName);
-                _equippedGear[entry.characterName] = (string[])entry.slotIds.Clone();
+                
+                // 기존의 GEAR_SLOTS 크기에 맞춰 채워넣어 이전 세이브파일 구조 유지
+                for (int i = 0; i < entry.slotIds.Count && i < GEAR_SLOTS; i++)
+                {
+                    _equippedGear[entry.characterName][i] = entry.slotIds[i];
+                }
 
                 CharacterBase ch = FindCharacter(entry.characterName);
                 if (ch == null) continue;
 
-                for (int i = 0; i < GEAR_SLOTS; i++)
+                for (int i = 0; i < _equippedGear[entry.characterName].Count; i++)
                 {
-                    string id = entry.slotIds[i];
-                    if (id != null && _items.TryGetValue(id, out var item))
+                    string id = _equippedGear[entry.characterName][i];
+                    if (!string.IsNullOrEmpty(id) && _items.TryGetValue(id, out var item))
                         ApplyStatBonus(ch, item.FinalStat);
                 }
             }
@@ -407,7 +418,11 @@ namespace BossRaid.Managers
         private void EnsureGearSlots(string characterName)
         {
             if (!_equippedGear.ContainsKey(characterName))
-                _equippedGear[characterName] = new string[GEAR_SLOTS];
+            {
+                var emptySlots = new List<string>();
+                for (int i = 0; i < GEAR_SLOTS; i++) emptySlots.Add(string.Empty);
+                _equippedGear[characterName] = emptySlots;
+            }
         }
 
         private CharacterBase FindCharacter(string characterName)
