@@ -42,14 +42,29 @@ namespace BossRaid.Combat
         //  전투 스탯 (직업 클래스 Awake에서 초기값 설정)
         // ─────────────────────────────────────────
 
-        [Header("전투 스탯")]
-        public float autoAttackDamage        = 50f;
-        public float attackSpeed             = 1.0f;   // 공격 간격(초). 낮을수록 빠름
-        public float attackRange             = 3f;
-        public float movementSpeed           = 5f;
-        public float attackPowerMultiplier   = 1.0f;   // 스킬 계수 배율
-        public float damageReductionMultiplier = 1.0f; // 피해 감소 배율 (0.7 = 30% 경감)
-        public float shieldAmount            = 0f;     // 현재 흡수 가능한 쉴드량
+        [Header("전투 스탯 (기본값 — 자식 클래스에서 설정)")]
+        [SerializeField] protected float initialAttackDamage = 50f;
+        [SerializeField] protected float initialAttackSpeed = 1.0f;
+        [SerializeField] protected float initialAttackRange = 3f;
+        [SerializeField] protected float initialMovementSpeed = 5f;
+        [SerializeField] protected float initialDamageReduction = 0f; // 0.1 = 10% 경감
+
+        // ─────────────────────────────────────────
+        //  실시간 계산 스탯 (Base + Modifiers)
+        // ─────────────────────────────────────────
+        private ModifiableStat _healthStat;
+        private ModifiableStat _damageStat;
+        private ModifiableStat _attackSpeedStat;
+        private ModifiableStat _dmgReducStat;
+
+        public float maxHealth => _healthStat?.GetValue() ?? maxHpUpgrade.CurrentStat;
+        public float autoAttackDamage => _damageStat?.GetValue() ?? (attackPowerUpgrade.CurrentStat + initialAttackDamage);
+        public float attackSpeed => _attackSpeedStat?.GetValue() ?? initialAttackSpeed;
+        public float damageReduction => _dmgReducStat?.GetValue() ?? initialDamageReduction;
+
+        public float attackRange => initialAttackRange;
+        public float movementSpeed => initialMovementSpeed;
+        public float shieldAmount = 0f;
 
         [Header("스킬 이펙트")]
         [Tooltip("스킬명→VFX 매핑 데이터베이스 (없으면 이펙트 없이 동작)")]
@@ -70,10 +85,11 @@ namespace BossRaid.Combat
             statIncreasePerLevel = 250 // 레벨당 250 증가
         };
 
-        public float maxHealth 
+        public void RefreshBaseStats()
         {
-            get => maxHpUpgrade.CurrentStat;
-            set => maxHpUpgrade.baseStat = value - (maxHpUpgrade.currentLevel - 1) * maxHpUpgrade.statIncreasePerLevel;
+            if (_healthStat == null) InitializeStats();
+            _healthStat.BaseValue = maxHpUpgrade.CurrentStat;
+            _damageStat.BaseValue = attackPowerUpgrade.CurrentStat;
         }
 
         [Tooltip("현재 체력 — 인스펙터에서 실시간 확인 가능")]
@@ -481,11 +497,65 @@ namespace BossRaid.Combat
             _animHandler = GetComponent<ICharacterAnimationHandler>();
             _animator = GetComponentInChildren<Animator>();
             _rb = GetComponent<Rigidbody>();
+            
+            InitializeStats();
         }
+
+        private void InitializeStats()
+        {
+            // 성장 시스템의 베이스를 직업별 초기값으로 동기화
+            attackPowerUpgrade.baseStat = 0; // initialAttackDamage를 따로 더하므로 0으로 시작
+            
+            _healthStat = new ModifiableStat(maxHpUpgrade.CurrentStat);
+            _damageStat = new ModifiableStat(attackPowerUpgrade.CurrentStat + initialAttackDamage);
+            _attackSpeedStat = new ModifiableStat(initialAttackSpeed);
+            _dmgReducStat = new ModifiableStat(initialDamageReduction);
+        }
+
+        /// <summary>장비나 버프의 모디파이어를 추가합니다.</summary>
+        public void AddStatModifier(StatType type, StatModifier mod)
+        {
+            GetStat(type).AddModifier(mod);
+            if (type == StatType.MaxHP) currentHealth = currentHealth; // UI 갱신 유도
+        }
+
+        /// <summary>장비나 버프의 모디파이어를 제거합니다.</summary>
+        public void RemoveStatModifier(StatType type, StatModifier mod)
+        {
+            GetStat(type).RemoveModifier(mod);
+            if (type == StatType.MaxHP) currentHealth = currentHealth; // UI 갱신 유도
+        }
+
+        public void RemoveAllModifiersFromSource(object source)
+        {
+            _healthStat.RemoveAllModifiersFromSource(source);
+            _damageStat.RemoveAllModifiersFromSource(source);
+            _attackSpeedStat.RemoveAllModifiersFromSource(source);
+            _dmgReducStat.RemoveAllModifiersFromSource(source);
+            currentHealth = currentHealth;
+        }
+
+        private ModifiableStat GetStat(StatType type)
+        {
+            return type switch
+            {
+                StatType.MaxHP => _healthStat,
+                StatType.AttackDamage => _damageStat,
+                StatType.AttackSpeed => _attackSpeedStat,
+                StatType.DamageReduction => _dmgReducStat,
+                _ => _healthStat
+            };
+        }
+
+        public enum StatType { MaxHP, AttackDamage, AttackSpeed, DamageReduction }
 
         protected virtual void Start()
         {
             InitializeHP();
+            
+            // 강화 로직 연동 (UI에서 강화 시 즉시 ModifiableStat에 반영)
+            if (maxHpUpgrade != null) maxHpUpgrade.OnUpgrade += RefreshBaseStats;
+            if (attackPowerUpgrade != null) attackPowerUpgrade.OnUpgrade += RefreshBaseStats;
         }
 
         protected virtual void Update()
@@ -540,7 +610,9 @@ namespace BossRaid.Combat
         /// </summary>
         protected virtual float CalculateDamageReduction(float incomingDamage)
         {
-            return incomingDamage;
+            // damageReduction이 0.1이면 10% 감소 → 0.9배 적용
+            float reduction = Mathf.Clamp(damageReduction, 0f, 0.95f); // 최대 95% 캡
+            return incomingDamage * (1f - reduction);
         }
 
         // ═══════════════════════════════════════════════════════════

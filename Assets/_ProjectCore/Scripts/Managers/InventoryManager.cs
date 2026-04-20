@@ -74,6 +74,11 @@ namespace BossRaid.Managers
         private readonly Dictionary<string, List<string>> _equippedGear
             = new Dictionary<string, List<string>>();
 
+        // [신규] 장착 중인 아이템의 모디파이어 추적 (인스턴스ID -> 모디파이어 리스트)
+        // 캐릭터당 여러 슬롯 모디파이어를 관리하기 위해 복합 키 사용: characterName_instanceId
+        private readonly Dictionary<string, List<StatModifier>> _activeModifiers 
+            = new Dictionary<string, List<StatModifier>>();
+
         // ─────────────────────────────────────────
         //  이벤트 (UI 구독용)
         // ─────────────────────────────────────────
@@ -186,12 +191,12 @@ namespace BossRaid.Managers
 
             // 기존 장착 해제
             string prevId = _equippedGear[characterName][slotIndex];
-            if (!string.IsNullOrEmpty(prevId) && _items.TryGetValue(prevId, out var prevItem))
-                RemoveStatBonus(character, prevItem.FinalStat);
+            if (!string.IsNullOrEmpty(prevId))
+                RemoveGearModifiers(character, prevId);
 
             // 새 장비 장착
             _equippedGear[characterName][slotIndex] = instanceId;
-            ApplyStatBonus(character, item.FinalStat);
+            ApplyGearModifiers(character, item);
             OnGearChanged?.Invoke(characterName, slotIndex, item);
             SaveManager.Instance?.MarkDirty();
 
@@ -210,8 +215,8 @@ namespace BossRaid.Managers
             if (string.IsNullOrEmpty(prevId)) return;
 
             CharacterBase character = FindCharacter(characterName);
-            if (character != null && _items.TryGetValue(prevId, out var item))
-                RemoveStatBonus(character, item.FinalStat);
+            if (character != null)
+                RemoveGearModifiers(character, prevId);
 
             slots[slotIndex] = string.Empty; // 빈 문자열로 초기화
             OnGearChanged?.Invoke(characterName, slotIndex, null);
@@ -256,15 +261,7 @@ namespace BossRaid.Managers
                 return false;
             }
 
-            // 장착 중인 캐릭터 찾기 (스탯 델타 적용용)
-            StatBonus beforeStat = item.FinalStat;
-
-            item.enhanceLevel++;
-
-            StatBonus afterStat  = item.FinalStat;
-            StatBonus delta      = afterStat + NegatedBonus(beforeStat);
-
-            // 장착 중이면 델타만큼 즉시 스탯 갱신
+            // 강화 시 모디파이어 갱신을 위해 재장착 로직 수행
             foreach (var kv in _equippedGear)
             {
                 for (int i = 0; i < kv.Value.Count; i++)
@@ -272,7 +269,11 @@ namespace BossRaid.Managers
                     if (kv.Value[i] == instanceId)
                     {
                         CharacterBase ch = FindCharacter(kv.Key);
-                        if (ch != null) ApplyStatBonus(ch, delta);
+                        if (ch != null)
+                        {
+                            RemoveGearModifiers(ch, instanceId);
+                            ApplyGearModifiers(ch, item);
+                        }
                     }
                 }
             }
@@ -323,31 +324,59 @@ namespace BossRaid.Managers
         //  스탯 적용 내부 로직
         // ═══════════════════════════════════════════════════════════
 
-        private void ApplyStatBonus(CharacterBase ch, StatBonus s)
+        private void ApplyGearModifiers(CharacterBase ch, EquipmentData item)
         {
-            float baseHp = ch.maxHealth;
+            string key = $"{ch.characterName}_{item.instanceId}";
+            var modifiers = new List<StatModifier>();
+            var s = item.FinalStat;
 
-            ch.autoAttackDamage        += s.bonusAttack;
-            ch.maxHealth               += s.bonusHpFlat + baseHp * s.bonusHpPercent;
-            ch.damageReductionMultiplier = Mathf.Max(0f,
-                ch.damageReductionMultiplier - s.bonusDmgReduction);
-            ch.attackSpeed             = Mathf.Max(0.1f,
-                ch.attackSpeed * (1f - s.bonusAttackSpeed));
+            // 1. 공격력 (Flat)
+            if (s.bonusAttack > 0)
+                modifiers.Add(new StatModifier(s.bonusAttack, StatModType.Flat, item));
+            
+            // 2. HP (Flat + PercentAdd)
+            if (s.bonusHpFlat > 0)
+                modifiers.Add(new StatModifier(s.bonusHpFlat, StatModType.Flat, item));
+            if (s.bonusHpPercent > 0)
+                modifiers.Add(new StatModifier(s.bonusHpPercent, StatModType.PercentAdd, item));
+
+            // 3. 공격 속도 (PercentAdd) - 0.05 = 5% 증가
+            if (s.bonusAttackSpeed > 0)
+                modifiers.Add(new StatModifier(s.bonusAttackSpeed, StatModType.PercentAdd, item));
+
+            // 4. 피해 경감 (PercentAdd)
+            if (s.bonusDmgReduction > 0)
+                modifiers.Add(new StatModifier(s.bonusDmgReduction, StatModType.PercentAdd, item));
+
+            // 실제 캐릭터에게 적용
+            foreach(var mod in modifiers)
+            {
+                if (mod.Type == StatModType.Flat || mod.Type == StatModType.PercentAdd)
+                {
+                    // StatBonus 필드 이름에 따라 매핑
+                    if (mod.Value == s.bonusAttack) ch.AddStatModifier(CharacterBase.StatType.AttackDamage, mod);
+                    else if (mod.Value == s.bonusHpFlat || mod.Value == s.bonusHpPercent) ch.AddStatModifier(CharacterBase.StatType.MaxHP, mod);
+                    else if (mod.Value == s.bonusAttackSpeed) ch.AddStatModifier(CharacterBase.StatType.AttackSpeed, mod);
+                    else if (mod.Value == s.bonusDmgReduction) ch.AddStatModifier(CharacterBase.StatType.DamageReduction, mod);
+                }
+            }
+
+            _activeModifiers[key] = modifiers;
         }
 
-        private void RemoveStatBonus(CharacterBase ch, StatBonus s)
-            => ApplyStatBonus(ch, NegatedBonus(s));
-
-        /// <summary>StatBonus의 부호를 뒤집어 반환합니다. (장비 해제 시 스탯 환원)</summary>
-        private StatBonus NegatedBonus(StatBonus s) => new StatBonus
+        private void RemoveGearModifiers(CharacterBase ch, string instanceId)
         {
-            bonusAttack       = -s.bonusAttack,
-            bonusHpFlat       = -s.bonusHpFlat,
-            bonusHpPercent    = -s.bonusHpPercent,
-            bonusDmgReduction = -s.bonusDmgReduction,
-            bonusAttackSpeed  = -s.bonusAttackSpeed,
-            bonusCritChance   = -s.bonusCritChance,
-        };
+            string key = $"{ch.characterName}_{instanceId}";
+            if (!_activeModifiers.TryGetValue(key, out var modifiers)) return;
+
+            foreach (var mod in modifiers)
+            {
+                // Source객체 매칭으로 일괄 제거 (더 안전함)
+                ch.RemoveAllModifiersFromSource(mod.Source);
+            }
+
+            _activeModifiers.Remove(key);
+        }
 
         // ═══════════════════════════════════════════════════════════
         //  SaveManager 연동 (직렬화 / 복원)

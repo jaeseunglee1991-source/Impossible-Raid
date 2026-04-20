@@ -88,20 +88,25 @@ namespace BossRaid.Managers
         // ──────────────────────────────────────────────
         // 2. 잡몹 처리 카운팅
         // ──────────────────────────────────────────────
-        public void OnMobKilled(int goldReward)
+        public async void OnMobKilled(int goldReward)
         {
             if (CurrentState != GameState.IdleFarming) return;
 
             MobsKilledInStage++;
             UpdateStageUI(); 
 
+            // [신규] 서버에 드랍 여부 요청 (비연결형 시뮬레이션)
             try
             {
-                InventoryManager.Instance?.TryDrop(CurrentStageLevel);
+                var dropItem = await RewardService.RequestMobDrop(CurrentStageLevel);
+                if (dropItem != null)
+                {
+                    InventoryManager.Instance?.AddItem(dropItem);
+                }
             }
             catch (System.Exception e)
             {
-                Debug.LogWarning($"[StageManager] 드랍 처리 중 오류 (무시): {e.Message}");
+                Debug.LogWarning($"[StageManager] 드랍 요청 중 오류: {e.Message}");
             }
 
             if (MobsKilledInStage >= MobsRequiredForBoss)
@@ -198,11 +203,12 @@ namespace BossRaid.Managers
             // 6. 성공 시 다음 스테이지 이동
             Debug.Log($"<color=cyan>[StageManager] 동기화 완료! 다음 스테이지 이동.</color>");
 
-            // 💡 [수정됨] 유저 흐름을 방해하지 않기 위해 성공 시 중앙 팝업 메시지를 띄우지 않습니다.
-            // if (InGameHUDController.Instance != null)
-            //     InGameHUDController.Instance.ShowSystemMessage("<color=#00FF00>보상 획득 완료! 다음 스테이지로 이동합니다.</color>");
-
-            InventoryManager.Instance?.DropFromBoss(CurrentStageLevel);
+            // [신규] 서버로부터 확정 보상 아이템 수령 (핵 방지)
+            var bossReward = await RewardService.RequestBossReward(CurrentStageLevel);
+            if (bossReward != null)
+            {
+                InventoryManager.Instance?.AddItem(bossReward);
+            }
 
             CurrentStageLevel++;
             MobsKilledInStage = 0;

@@ -12,11 +12,14 @@ namespace BossRaid.Combat.Classes
             base.Awake();
             role          = CharacterRole.Tank;
             characterName = "전사";
-            maxHealth     = 2000f;
-            autoAttackDamage = 50f;
-            attackSpeed   = 1.0f;
-            attackRange   = 3f;
-            threatMultiplier = 3.0f; // 탱커: 피해의 300% 어그로
+            
+            // 초기 스탯 설정 (Base + Modifiers 시스템 연동)
+            maxHpUpgrade.baseStat = 2000f;
+            initialAttackDamage = 50f;
+            initialAttackSpeed = 1.0f;
+            initialAttackRange = 3f;
+            initialDamageReduction = 0.2f; // 방어 특성: 기본 20% 피해 경감
+            threatMultiplier = 3.0f;
 
             RegisterSkills(
                 new SkillDefinition("도발의 일격",   4f, 0,
@@ -71,21 +74,26 @@ namespace BossRaid.Combat.Classes
 
         private IEnumerator AllyProtection(CharacterBase ally, float duration)
         {
-            float prevRed = ally.damageReductionMultiplier;
-            ally.damageReductionMultiplier = 0.8f; // 20% 감소
+            // 20% 추가 경감 (합연산)
+            var mod = new StatModifier(0.2f, StatModType.PercentAdd, this);
+            ally.AddStatModifier(StatType.DamageReduction, mod);
             yield return new WaitForSeconds(duration);
-            ally.damageReductionMultiplier = prevRed;
+            ally.RemoveStatModifier(StatType.DamageReduction, mod);
         }
 
         private IEnumerator ShieldWallDuration(float duration)
         {
-            float prevRed = damageReductionMultiplier;
-            damageReductionMultiplier = 0.1f; // 90% 감소
+            // 90% 추가 경감 (합연산)
+            var mod = new StatModifier(0.9f, StatModType.PercentAdd, this);
+            AddStatModifier(StatType.DamageReduction, mod);
             yield return new WaitForSeconds(duration);
-            damageReductionMultiplier = prevRed;
+            RemoveStatModifier(StatType.DamageReduction, mod);
         }
 
         protected override float CalculateDamageReduction(float incoming)
-            => incoming * damageReductionMultiplier;
+        {
+            // 베이스 로직(CharacterBase) 사용: (1 - damageReduction) 곱함
+            return base.CalculateDamageReduction(incoming);
+        }
     }
 }

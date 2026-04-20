@@ -15,6 +15,7 @@ namespace BossRaid.Combat
         [Header("성장 기본 정보")]
         public string statName = "공격력 강화";
         public int currentLevel = 1;
+        public Action OnUpgrade; // 강화 성공 시 캐릭터에게 알림
 
         [Header("비용 밸런싱")]
         public double baseCost = 10f;         // 1->2 레벨업 시 필요한 기본 골드
@@ -53,6 +54,7 @@ namespace BossRaid.Combat
             if (GrowthManager.Instance != null && GrowthManager.Instance.SpendGold(cost))
             {
                 currentLevel++;
+                OnUpgrade?.Invoke(); // 스탯 동기화 유도
                 Debug.Log($"[{statName}] 레벨업 성공! Lvl.{currentLevel} / 최종 스탯: {CurrentStat} / 다음 필요 골드: {NextUpgradeCost:F0}");
                 
                 // 강화 레벨 변경 → 저장 예약 (2초 후 일괄 저장)

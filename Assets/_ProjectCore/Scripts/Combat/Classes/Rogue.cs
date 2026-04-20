@@ -10,11 +10,13 @@ namespace BossRaid.Combat.Classes
             base.Awake();
             role          = CharacterRole.MeleeDPS;
             characterName = "도적";
-            maxHealth     = 1200f;
-            autoAttackDamage = 40f;
-            attackSpeed   = 0.5f;
-            attackRange   = 2.5f;
-            threatMultiplier = 0.5f; // 도적: 피해의 50% 어그로 (어그로 감소)
+            
+            // 초기 스탯 설정 (Base + Modifiers 시스템 연동)
+            maxHpUpgrade.baseStat = 1200f;
+            initialAttackDamage = 40f;
+            initialAttackSpeed = 0.5f;
+            initialAttackRange = 2.5f;
+            threatMultiplier = 0.5f;
 
             RegisterSkills(
                 new SkillDefinition("암살",           5f, 0,

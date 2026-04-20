@@ -10,11 +10,13 @@ namespace BossRaid.Combat.Classes
             base.Awake();
             role          = CharacterRole.Healer;
             characterName = "힐러";
-            maxHealth     = 900f;
-            autoAttackDamage = 25f;
-            attackSpeed   = 1.2f;
-            attackRange   = 5.0f;
-            threatMultiplier = 0.2f; // 힐러: 치유/피해의 20% 어그로 (매우 낮음)
+            
+            // 초기 스탯 설정 (Base + Modifiers 시스템 연동)
+            maxHpUpgrade.baseStat = 900f;
+            initialAttackDamage = 25f;
+            initialAttackSpeed = 1.2f;
+            initialAttackRange = 5.0f;
+            threatMultiplier = 0.2f;
 
             RegisterSkills(
                 new SkillDefinition("치유의 빛",   4f, 0,
@@ -92,10 +94,11 @@ namespace BossRaid.Combat.Classes
 
         private IEnumerator SanctuaryEffect(CharacterBase ally, float duration)
         {
-            float prevRed = ally.damageReductionMultiplier;
-            ally.damageReductionMultiplier = 0.5f; // 50% 감소
+            // 50% 추가 경감 (합연산)
+            var mod = new StatModifier(0.5f, StatModType.PercentAdd, this);
+            ally.AddStatModifier(StatType.DamageReduction, mod);
             yield return new WaitForSeconds(duration);
-            ally.damageReductionMultiplier = prevRed;
+            ally.RemoveStatModifier(StatType.DamageReduction, mod);
         }
     }
 }
