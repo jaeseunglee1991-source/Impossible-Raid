@@ -303,7 +303,8 @@ namespace BossRaid.Managers
                 RestoreUpgrade(data, keyPrefix, character.attackPowerUpgrade);
                 RestoreUpgrade(data, keyPrefix, character.maxHpUpgrade);
 
-                int[] savedSlots = data.GetEquippedSlots(character.characterName);
+                // 배열(int[]) 대신 리스트(List<int>)로 받도록 수정
+                List<int> savedSlots = data.GetEquippedSlots(character.characterName);
                 if (savedSlots != null) character.RestoreEquippedSlots(savedSlots);
 
                 // 직업 추가 StatUpgrade가 있다면 여기서도 동일하게 복원
