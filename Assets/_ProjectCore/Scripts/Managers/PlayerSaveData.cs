@@ -91,26 +91,26 @@ namespace BossRaid.Managers
 
         // ─────────────────────────────────────────
         //  헬퍼 — 스킬 장착 슬롯 읽기/쓰기
-        //  키: "{characterName}"  값: int[3] (슬롯 0~2 인덱스)
+        //  키: "{characterName}"  값: List<int> (슬롯 0~2 인덱스)
         // ─────────────────────────────────────────
 
-        public int[] GetEquippedSlots(string characterName)
+        public List<int> GetEquippedSlots(string characterName)
         {
             foreach (var e in equippedSkills)
-                if (e.characterName == characterName) return e.slots;
+                if (e.characterName == characterName) return new List<int>(e.slots);
             return null; // 저장 기록 없음 → 직업 클래스 기본값 사용
         }
 
-        public void SetEquippedSlots(string characterName, int[] slots)
+        public void SetEquippedSlots(string characterName, List<int> slots)
         {
             foreach (var e in equippedSkills)
             {
-                if (e.characterName == characterName) { e.slots = (int[])slots.Clone(); return; }
+                if (e.characterName == characterName) { e.slots = new List<int>(slots); return; }
             }
             equippedSkills.Add(new EquipSaveEntry
             {
                 characterName = characterName,
-                slots         = (int[])slots.Clone()
+                slots         = new List<int>(slots)
             });
         }
     }
@@ -126,7 +126,8 @@ namespace BossRaid.Managers
     public class EquipSaveEntry
     {
         public string characterName;
-        public int[]  slots = new int[Combat.CharacterBase.SKILL_SLOT_COUNT];
+        // 배열 대신 List를 사용하여 의존성 분리 및 업데이트 호환성 확보
+        public List<int> slots = new List<int>(); 
     }
 
     // ─────────────────────────────────────────
@@ -200,7 +201,8 @@ namespace BossRaid.Managers
     [Serializable]
     public class GearSlotEntry
     {
-        public string   characterName;
-        public string[] slotIds = new string[InventoryManager.GEAR_SLOTS];
+        public string characterName;
+        // 배열 대신 List를 사용하여 초기화 오류 방지 및 확장성 확보
+        public List<string> slotIds = new List<string>(); 
     }
 }
