@@ -42,12 +42,12 @@ namespace BossRaid.Combat
         //  전투 스탯 (직업 클래스 Awake에서 초기값 설정)
         // ─────────────────────────────────────────
 
-        [Header("전투 스탯 (기본값 — 자식 클래스에서 설정)")]
-        [SerializeField] protected float initialAttackDamage = 50f;
-        [SerializeField] protected float initialAttackSpeed = 1.0f;
+        [Header("전투 스탯 (기본값 — 클래식 로우 스탯)")]
+        [SerializeField] protected float initialAttackDamage = 10f;
+        [SerializeField] protected float initialAttackSpeed = 1.5f;   // 기본 1.5초 (육안 확인 가능)
         [SerializeField] protected float initialAttackRange = 3f;
-        [SerializeField] protected float initialMovementSpeed = 5f;
-        [SerializeField] protected float initialDamageReduction = 0f; // 0.1 = 10% 경감
+        [SerializeField] protected float initialMovementSpeed = 3f;
+        [SerializeField] protected float initialDefense = 2f;         // %가 아닌 고정 방어 수치
 
         // ─────────────────────────────────────────
         //  실시간 계산 스탯 (Base + Modifiers)
@@ -60,7 +60,7 @@ namespace BossRaid.Combat
         public float maxHealth => _healthStat?.GetValue() ?? maxHpUpgrade.CurrentStat;
         public float autoAttackDamage => _damageStat?.GetValue() ?? (attackPowerUpgrade.CurrentStat + initialAttackDamage);
         public float attackSpeed => _attackSpeedStat?.GetValue() ?? initialAttackSpeed;
-        public float damageReduction => _dmgReducStat?.GetValue() ?? initialDamageReduction;
+        public float defense => _defenseStat?.GetValue() ?? initialDefense;
 
         public float attackRange => initialAttackRange;
         public float movementSpeed => initialMovementSpeed;
@@ -81,8 +81,8 @@ namespace BossRaid.Combat
             statName             = "최대 체력",
             baseCost             = 10,
             costMultiplier       = 1.15,
-            baseStat             = 1000,
-            statIncreasePerLevel = 250 // 레벨당 250 증가
+            baseStat             = 100,
+            statIncreasePerLevel = 20  // 레벨당 20 증가 (리니지식 로우 스탯)
         };
 
         public void RefreshBaseStats()
@@ -470,8 +470,8 @@ namespace BossRaid.Combat
             statName             = "기본 공격력",
             baseCost             = 10,
             costMultiplier       = 1.15,
-            baseStat             = 15,
-            statIncreasePerLevel = 3
+            baseStat             = 5,
+            statIncreasePerLevel = 1   // 레벨당 공격력 1 증가가 매우 큼
         };
 
         [Header("전투 속성")]
@@ -504,12 +504,12 @@ namespace BossRaid.Combat
         private void InitializeStats()
         {
             // 성장 시스템의 베이스를 직업별 초기값으로 동기화
-            attackPowerUpgrade.baseStat = 0; // initialAttackDamage를 따로 더하므로 0으로 시작
+            attackPowerUpgrade.baseStat = 0; 
             
             _healthStat = new ModifiableStat(maxHpUpgrade.CurrentStat);
             _damageStat = new ModifiableStat(attackPowerUpgrade.CurrentStat + initialAttackDamage);
             _attackSpeedStat = new ModifiableStat(initialAttackSpeed);
-            _dmgReducStat = new ModifiableStat(initialDamageReduction);
+            _defenseStat = new ModifiableStat(initialDefense);
         }
 
         /// <summary>장비나 버프의 모디파이어를 추가합니다.</summary>
@@ -531,7 +531,7 @@ namespace BossRaid.Combat
             _healthStat.RemoveAllModifiersFromSource(source);
             _damageStat.RemoveAllModifiersFromSource(source);
             _attackSpeedStat.RemoveAllModifiersFromSource(source);
-            _dmgReducStat.RemoveAllModifiersFromSource(source);
+            _defenseStat.RemoveAllModifiersFromSource(source);
             currentHealth = currentHealth;
         }
 
@@ -542,12 +542,13 @@ namespace BossRaid.Combat
                 StatType.MaxHP => _healthStat,
                 StatType.AttackDamage => _damageStat,
                 StatType.AttackSpeed => _attackSpeedStat,
-                StatType.DamageReduction => _dmgReducStat,
+                StatType.Defense => _defenseStat,
+                StatType.DamageReduction => _defenseStat, // 하위 호환
                 _ => _healthStat
             };
         }
 
-        public enum StatType { MaxHP, AttackDamage, AttackSpeed, DamageReduction }
+        public enum StatType { MaxHP, AttackDamage, AttackSpeed, Defense, DamageReduction }
 
         protected virtual void Start()
         {
@@ -610,9 +611,9 @@ namespace BossRaid.Combat
         /// </summary>
         protected virtual float CalculateDamageReduction(float incomingDamage)
         {
-            // damageReduction이 0.1이면 10% 감소 → 0.9배 적용
-            float reduction = Mathf.Clamp(damageReduction, 0f, 0.95f); // 최대 95% 캡
-            return incomingDamage * (1f - reduction);
+            // 리니지 스타일: 최종 데미지 = 공격력 - 방어력 (최소 1)
+            float finalDamage = incomingDamage - defense;
+            return Mathf.Max(1f, finalDamage);
         }
 
         // ═══════════════════════════════════════════════════════════

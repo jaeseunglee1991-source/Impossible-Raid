@@ -11,11 +11,12 @@ namespace BossRaid.Combat.Classes
             role          = CharacterRole.RangedDPS;
             characterName = "마법사";
             
-            // 초기 스탯 설정
-            maxHpUpgrade.baseStat = 800f;
-            initialAttackDamage = 60f;
-            initialAttackSpeed = 1.5f;
+            // 초기 스탯 설정 (리니지 로우 스탯 버전)
+            maxHpUpgrade.baseStat = 80f;
+            initialAttackDamage = 14f;
+            initialAttackSpeed = 1.8f;   // 긴 영창 시간 반영
             initialAttackRange = 6.0f;
+            initialDefense = 1f;
             threatMultiplier = 1.0f;
 
             RegisterSkills(
@@ -82,8 +83,8 @@ namespace BossRaid.Combat.Classes
 
         private IEnumerator TimeWarpBuff(CharacterBase ally, float duration)
         {
-            // 공격속도 100% 가중 (합연산 1.0f 추가 → 실제 처리 속도 2배)
-            var mod = new StatModifier(1.0f, StatModType.PercentAdd, this);
+            // 공격속도 30% 증가 (가속 로직)
+            var mod = new StatModifier(0.3f, StatModType.PercentAdd, this);
             ally.AddStatModifier(StatType.AttackSpeed, mod);
             yield return new WaitForSeconds(duration);
             ally.RemoveStatModifier(StatType.AttackSpeed, mod);

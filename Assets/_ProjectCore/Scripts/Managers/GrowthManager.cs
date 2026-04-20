@@ -59,19 +59,18 @@ namespace BossRaid.Managers
             }
         }
 
-        // ─── 경제 밸런스 공식 ───────────────────────────────────────────
-        /// <summary>스테이지 레벨에 따른 잡몹 1마리당 골드 지급량 보정 공식 (1.15배수)</summary>
+        // ─── 경제 밸런스 공식 (리니지 로우 스탯형) ───────────────────────────
+        /// <summary>스테이지 레벨에 따른 잡몹 1마리당 골드 지급량 (선형 성장)</summary>
         public double CalculateMobGold(int stageLevel)
         {
-            double baseGold = 10f;
-            double multiplier = 1.15f;
-            return Math.Floor(baseGold * Math.Pow(multiplier, stageLevel));
+            // 기본 2원 + 레벨당 1원 증가 (클래식 RPG 스타일)
+            return 2 + (stageLevel - 1);
         }
 
-        /// <summary>보스는 잡몹 50마리 분량의 골드를 한방에 지급</summary>
+        /// <summary>보스 보상: 잡몹 약 10마리 분량</summary>
         public double CalculateBossGold(int stageLevel)
         {
-            return CalculateMobGold(stageLevel) * 50.0;
+            return CalculateMobGold(stageLevel) * 10.0;
         }
 
         // ─── Public API ─────────────────────────────────────────────────

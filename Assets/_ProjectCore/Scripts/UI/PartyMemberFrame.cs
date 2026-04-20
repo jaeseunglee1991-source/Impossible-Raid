@@ -19,6 +19,8 @@ namespace BossRaid.UI
         public Image hpFill;              // HP 바 Fill 이미지 (색상 제어용)
         public TextMeshProUGUI hpText;    // HP 숫자 텍스트
         public Image deadOverlay;         // 사망 시 어둡게 덮는 오버레이
+        public Image selectedIndicator;   // [New] 선택된 캐릭터 강조 테두리/효과
+        private Button _frameButton;      // 클릭 감지용
 
         [Header("AnyRPG Visual Assets")]
         public Image frameBackground;     // 배경 이미지 컴포넌트
@@ -57,6 +59,12 @@ namespace BossRaid.UI
             // 텍스트가 바닥에 깔리는 것을 방지하기 위해 계층 순서만 렌더링 최상위로 올림
             if (hpText != null) hpText.transform.SetAsLastSibling();
             if (nameText != null) nameText.transform.SetAsLastSibling();
+
+            // 버튼 컴포넌트 추가 및 이벤트 연결
+            _frameButton = GetComponent<Button>();
+            if (_frameButton == null) _frameButton = gameObject.AddComponent<Button>();
+            _frameButton.onClick.RemoveAllListeners();
+            _frameButton.onClick.AddListener(OnFrameClicked);
         }
 
         private TextMeshProUGUI CreateDynamicText(string name)
@@ -159,6 +167,34 @@ namespace BossRaid.UI
                     hpFill.color = Color.Lerp(new Color(0.7f, 0.05f, 0f), new Color(1f, 0.5f, 0.1f), hpRatio / 0.3f); 
             }
             if (deadOverlay != null) deadOverlay.gameObject.SetActive(linkedCharacter.IsDead);
+            
+            // 현재 내가 조종 중인 캐릭터인지 확인하여 강조
+            UpdateSelectionVisual();
+        }
+
+        private void UpdateSelectionVisual()
+        {
+            if (selectedIndicator == null || linkedCharacter == null) return;
+
+            // BattleManager의 ActiveCharacters 중 내 characterBase가 playerControlled 인지 확인
+            var controller = linkedCharacter.GetComponent<TagCharacterController>();
+            bool isSelected = controller != null && controller.isPlayerControlled;
+            
+            selectedIndicator.gameObject.SetActive(isSelected);
+        }
+
+        private void OnFrameClicked()
+        {
+            if (linkedCharacter == null || linkedCharacter.IsDead) return;
+
+            var controller = linkedCharacter.GetComponent<TagCharacterController>();
+            if (controller != null && Managers.BattleManager.Instance != null)
+            {
+                Managers.BattleManager.Instance.SetControlledCharacter(controller);
+                
+                // [신규] 모든 프레임에 선택 UI 갱신 요청
+                InGameHUDController.Instance?.RefreshAllPartyFrames();
+            }
         }
 
         private Sprite LoadSpriteFromResources(string path)

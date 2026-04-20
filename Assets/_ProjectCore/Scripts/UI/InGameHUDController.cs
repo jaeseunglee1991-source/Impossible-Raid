@@ -208,9 +208,18 @@ namespace BossRaid.UI
                     }
                 }
             }
+        public void RefreshAllPartyFrames()
+        {
+            foreach (var frame in partyFrames)
+            {
+                if (frame != null) frame.UpdateHPUI(frame.linkedCharacter.currentHealth, frame.linkedCharacter.maxHealth);
+            }
+            
+            // 스킬 버튼 정보도 현재 조력 캐릭터에 맞춰 갱신
+            InitializeSkillButtons();
         }
 
-        private void InitializeSkillButtons()
+        public void InitializeSkillButtons()
         {
             if (localPlayer != null)
             {
@@ -301,6 +310,7 @@ namespace BossRaid.UI
         {
             if (localPlayer != null)
             {
+                // 인스펙터 index에 상관없이 궁극기는 3번(또는 별도 메서드) 호출
                 localPlayer.TryUseSkill(3);
             }
         }

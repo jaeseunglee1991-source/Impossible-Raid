@@ -26,7 +26,7 @@ namespace BossRaid.Combat
         public bool isIdleAIMode = false;
 
         [Header("Movement (Player)")]
-        public float moveSpeed = 5f;
+        public float moveSpeed = 3f;
         private Vector3 movementInput;
         private CharacterController cc;
 

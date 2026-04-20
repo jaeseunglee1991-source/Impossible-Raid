@@ -51,23 +51,32 @@ namespace BossRaid.Combat
             Transform spawnPoint = spawnPoints[Random.Range(0, spawnPoints.Length)];
 
             _currentEnemy = Instantiate(prefab, spawnPoint.position, spawnPoint.rotation);
-            _currentEnemy.name = $"Monster_{StageManager.Instance?.MobsKilledInStage ?? 0}";
+            _currentEnemy.name = $"BossMob_{StageManager.Instance?.MobsKilledInStage ?? 0}";
+            _currentEnemy.transform.localScale = Vector3.one * 1.5f; // 보스처럼 거대하게 연출
 
             // 아군 프리팹 재활용 시 불필요 스크립트 제거
             var tagController = _currentEnemy.GetComponent<TagCharacterController>();
             if (tagController != null) Destroy(tagController);
 
-            // 몬스터 AI 부착
+            // 몬스터 AI 부착 및 능력치 설정 (스테이지 레벨 비례)
+            int stageLvl = StageManager.Instance != null ? StageManager.Instance.CurrentStageLevel : 1;
+            
             if (_currentEnemy.GetComponent<IdleBoss>() == null)
             {
                 var boss = _currentEnemy.AddComponent<IdleBoss>();
-                boss.maxHP = 2000f;
-                boss.bossLevel = StageManager.Instance?.CurrentStageLevel ?? 1;
-                boss.isSpawnedMinion = true; // 스포너가 생성한 잡몹임을 명시
+                // ── [보스급 잡몹] 초고체력 및 강력한 데미지 공식 ──
+                boss.maxHP = 500f + (stageLvl * 500f);      // 1스테이지 1000, 10스테이지 5500
+                boss.autoAttackDamage = 10f + (stageLvl * 5f); // 1스테이지 15, 10스테이지 60
+                boss.autoAttackInterval = 1.2f;            // 공격도 더 매섭게 (1.2초)
+                boss.bossLevel = stageLvl;
+                boss.isSpawnedMinion = true;
             }
             else
             {
                 var boss = _currentEnemy.GetComponent<IdleBoss>();
+                boss.maxHP = 500f + (stageLvl * 500f);
+                boss.autoAttackDamage = 10f + (stageLvl * 5f);
+                boss.autoAttackInterval = 1.2f;
                 boss.isSpawnedMinion = true;
             }
 

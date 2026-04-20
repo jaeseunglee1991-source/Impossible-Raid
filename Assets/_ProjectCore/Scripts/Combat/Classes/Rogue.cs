@@ -11,11 +11,12 @@ namespace BossRaid.Combat.Classes
             role          = CharacterRole.MeleeDPS;
             characterName = "도적";
             
-            // 초기 스탯 설정 (Base + Modifiers 시스템 연동)
-            maxHpUpgrade.baseStat = 1200f;
-            initialAttackDamage = 40f;
-            initialAttackSpeed = 0.5f;
+            // 초기 스탯 설정 (리니지 로우 스탯 버전)
+            maxHpUpgrade.baseStat = 110f;
+            initialAttackDamage = 10f;
+            initialAttackSpeed = 1.2f;   // 도적: 빠른 편이지만 육안 확인 가능
             initialAttackRange = 2.5f;
+            initialDefense = 2f;
             threatMultiplier = 0.5f;
 
             RegisterSkills(

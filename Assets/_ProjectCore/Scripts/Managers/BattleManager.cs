@@ -319,6 +319,9 @@ namespace BossRaid.Managers
                     controller.EnableIdleAIMode(true); // 나머지는 자동 사냥
                 }
             }
+
+            // [추가] UI 상태 갱신 (선택 하이라이트 및 스킬 버튼 변경)
+            if (inGameHUD != null) inGameHUD.RefreshAllPartyFrames();
             
             Debug.Log($"[BattleManager] 조종 캐릭터 변경: {target.characterBase?.characterName}");
         }

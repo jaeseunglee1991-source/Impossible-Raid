@@ -13,12 +13,12 @@ namespace BossRaid.Combat.Classes
             role          = CharacterRole.Tank;
             characterName = "전사";
             
-            // 초기 스탯 설정 (Base + Modifiers 시스템 연동)
-            maxHpUpgrade.baseStat = 2000f;
-            initialAttackDamage = 50f;
-            initialAttackSpeed = 1.0f;
+            // 초기 스탯 설정 (리니지 로우 스탯 버전)
+            maxHpUpgrade.baseStat = 180f; // 기사: 높은 체력
+            initialAttackDamage = 8f;
+            initialAttackSpeed = 1.4f;    // 묵직한 공격
             initialAttackRange = 3f;
-            initialDamageReduction = 0.2f; // 방어 특성: 기본 20% 피해 경감
+            initialDefense = 5f;          // 기본 방어력 높음
             threatMultiplier = 3.0f;
 
             RegisterSkills(
@@ -74,20 +74,20 @@ namespace BossRaid.Combat.Classes
 
         private IEnumerator AllyProtection(CharacterBase ally, float duration)
         {
-            // 20% 추가 경감 (합연산)
-            var mod = new StatModifier(0.2f, StatModType.PercentAdd, this);
-            ally.AddStatModifier(StatType.DamageReduction, mod);
+            // 방어력 +5 증가 (고정치)
+            var mod = new StatModifier(5f, StatModType.Flat, this);
+            ally.AddStatModifier(StatType.Defense, mod);
             yield return new WaitForSeconds(duration);
-            ally.RemoveStatModifier(StatType.DamageReduction, mod);
+            ally.RemoveStatModifier(StatType.Defense, mod);
         }
 
         private IEnumerator ShieldWallDuration(float duration)
         {
-            // 90% 추가 경감 (합연산)
-            var mod = new StatModifier(0.9f, StatModType.PercentAdd, this);
-            AddStatModifier(StatType.DamageReduction, mod);
+            // 방어력 +20 증가 (철벽)
+            var mod = new StatModifier(20f, StatModType.Flat, this);
+            AddStatModifier(StatType.Defense, mod);
             yield return new WaitForSeconds(duration);
-            RemoveStatModifier(StatType.DamageReduction, mod);
+            RemoveStatModifier(StatType.Defense, mod);
         }
 
         protected override float CalculateDamageReduction(float incoming)

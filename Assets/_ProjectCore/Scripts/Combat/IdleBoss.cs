@@ -50,7 +50,7 @@ namespace BossRaid.Combat.Boss
             currentHP = maxHP;
             isDead = false;
             if (bossCollider != null) bossCollider.enabled = true;
-            nextRewardHpThreshold = 0.99f; 
+            nextRewardHpThreshold = 0.9f; // 90%부터 10%씩 차감하며 지급
 
             PlayBossAnimation("Idle");
 
@@ -58,6 +58,13 @@ namespace BossRaid.Combat.Boss
             if (_patternCoroutine != null) StopCoroutine(_patternCoroutine);
             _patternCoroutine = StartCoroutine(BossPatternLoop());
             StartCoroutine(AutoAttackLoop());
+
+            // 화면 상단 보스 UI 강제 연동
+            if (InGameHUDController.Instance != null)
+            {
+                InGameHUDController.Instance.ToggleBossFrame(true);
+                InGameHUDController.Instance.UpdateBossHealth(currentHP, maxHP, GetBossName());
+            }
         }
 
         // 공통 애니메이션 실행 헬퍼
@@ -82,22 +89,37 @@ namespace BossRaid.Combat.Boss
             currentHP -= damage;
             if (currentHP < 0) currentHP = 0;
 
+            // 보스 UI 실시간 갱신
+            if (InGameHUDController.Instance != null)
+                InGameHUDController.Instance.UpdateBossHealth(currentHP, maxHP, GetBossName());
+
             float currentHpPercent = currentHP / maxHP;
 
-            // 1% 깎일 때마다 타격감(UI)을 위해 보상 지급
-            while (currentHpPercent <= nextRewardHpThreshold && nextRewardHpThreshold >= 0f)
+            // 10% 깎일 때마다 큼직한 보상 지급 (보스 사냥의 손맛 연출)
+            while (currentHpPercent <= nextRewardHpThreshold && nextRewardHpThreshold > 0f)
             {
                 if (GrowthManager.Instance != null && StageManager.Instance != null)
                 {
-                    // 공식 기반의 보스 보상에서 1% 분량만 쪼개서 지급
-                    double bossGold = GrowthManager.Instance.CalculateBossGold(StageManager.Instance.CurrentStageLevel);
-                    GrowthManager.Instance.AddGold(bossGold * 0.01);
+                    int stageLvl = StageManager.Instance.CurrentStageLevel;
+                    
+                    // 잡몹이면 잡몹 골드, 보스면 보스 골드 기준
+                    double totalReward = isSpawnedMinion ? 
+                        GrowthManager.Instance.CalculateMobGold(stageLvl) : 
+                        GrowthManager.Instance.CalculateBossGold(stageLvl);
+
+                    // 10% 분량 지급
+                    GrowthManager.Instance.AddGold(totalReward * 0.1);
+                    Debug.Log($"<color=yellow>[보상] 몬스터 체력 {Mathf.RoundToInt(nextRewardHpThreshold * 100 + 10)}% 돌파! 금화 10% 획득.</color>");
                 }
-                nextRewardHpThreshold -= 0.01f;
+                nextRewardHpThreshold -= 0.1f;
             }
 
             if (currentHP <= 0 && !isDead)
             {
+                // 보스 사망 시 UI 정리
+                if (InGameHUDController.Instance != null && isSpawnedMinion)
+                    InGameHUDController.Instance.ToggleBossFrame(false);
+
                 Die();
             }
         }
@@ -110,19 +132,16 @@ namespace BossRaid.Combat.Boss
 
             if (isSpawnedMinion)
             {
-                // ─── 잡몹 사망: 클라이언트 로컬만 처리, 서버 호출 절대 금지 ───
+                // ─── 잡몹 사망: 마지막 10% 정산 및 마무리 ───
                 int stageLvl = StageManager.Instance != null ? StageManager.Instance.CurrentStageLevel : bossLevel;
-                double calculatedMobGold = 10.0; // 기본값
-                
+                double totalMobGold = GrowthManager.Instance != null ? GrowthManager.Instance.CalculateMobGold(stageLvl) : 10.0;
+
+                // 마지막 10% 지급 (이미 90%는 틱으로 지급됨)
                 if (GrowthManager.Instance != null)
-                    calculatedMobGold = GrowthManager.Instance.CalculateMobGold(stageLvl);
+                    GrowthManager.Instance.AddGold(totalMobGold * 0.1);
 
                 if (StageManager.Instance != null)
-                    StageManager.Instance.OnMobKilled((int)calculatedMobGold);
-
-                // GrowthManager에 로컬 골드 적립
-                if (GrowthManager.Instance != null)
-                    GrowthManager.Instance.AddGold(calculatedMobGold);
+                    StageManager.Instance.OnMobKilled(0); // 이미 골드는 위에서 줬으므로 0 전달
 
                 Destroy(gameObject, 1.5f);
             }
@@ -179,7 +198,8 @@ namespace BossRaid.Combat.Boss
                 _lastPatternIndex = patternIndex;
 
                 yield return StartCoroutine(ExecutePattern(patternIndex));
-                yield return new WaitForSeconds(4f); // 패턴 간 간격
+                yield return new WaitForSeconds(2.5f); // 패턴 간 간격 단축 (더 보스답게)
+            }
             }
         }
 
