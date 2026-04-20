@@ -37,8 +37,8 @@ namespace BossRaid.UI
         public TextMeshProUGUI timerText;
         public Button settingsButton;
         public Button scoreButton;
-        public Button giveUpButton;   // 새 버튼 추가
-        public Button inventoryButton; // 인벤토리 버튼 추가
+        public Button giveUpButton;   
+        public Button inventoryButton; 
         public TextMeshProUGUI lifeText;
 
         [Header("Inventory")]
@@ -46,8 +46,8 @@ namespace BossRaid.UI
 
         [Header("Settings Panel")]
         public GameObject settingsPanel;
-        public Button settingsCloseButton;      // 설정창 우측 상단 X 버튼
-        public Button settingsExitBattleButton; // 설정창 하단 '전투 종료' 버튼
+        public Button settingsCloseButton;      
+        public Button settingsExitBattleButton; 
 
         [Header("Give Up Popup")]
         public GameObject giveUpPopupPanel;
@@ -61,6 +61,12 @@ namespace BossRaid.UI
         [Header("Game State")]
         public CharacterBase localPlayer;
         public BossAI currentBoss;
+
+        [Header("Network & Loading UI (신규 추가)")]
+        [Tooltip("서버 통신 중 화면 터치를 막는 반투명 패널 (UI Canvas 아래에 생성 후 연결하세요)")]
+        public GameObject loadingBlockPanel; 
+        [Tooltip("오류나 알림 발생 시 화면 중앙에 뜨는 텍스트 (UI Canvas 아래에 생성 후 연결하세요)")]
+        public TextMeshProUGUI systemMessageText; 
 
         private void Awake()
         {
@@ -80,7 +86,7 @@ namespace BossRaid.UI
                 return;
             }
 
-            // 성장(업그레이드) UI 컨트롤러 자동 할당 (없으면 자동 생성)
+            // 성장(업그레이드) UI 컨트롤러 자동 할당
             if (FindAnyObjectByType<GrowthUIController>() == null)
             {
                 GameObject growthPanel = GameObject.Find("GrowthPanel");
@@ -90,13 +96,10 @@ namespace BossRaid.UI
                 }
                 else
                 {
-                    // GrowthPanel도 없으면 Manager 등에 붙임
                     gameObject.AddComponent<GrowthUIController>();
                 }
             }
 
-            // --- 기존 로직 ---
-            // 수동 할당이 안된 경우 대비하여 이름으로 자동 찾기 로직 추가
             if (settingsPanel != null)
             {
                 if (settingsCloseButton == null) settingsCloseButton = settingsPanel.transform.Find("CloseSettings")?.GetComponent<Button>();
@@ -116,24 +119,22 @@ namespace BossRaid.UI
             if (inventoryButton != null) inventoryButton.onClick.AddListener(ToggleInventory);
 
             ApplyHUDContainerStyling();
+            
+            // 시작 시 로딩 패널과 메시지 초기화
+            if (loadingBlockPanel != null) loadingBlockPanel.SetActive(false);
+            if (systemMessageText != null) systemMessageText.gameObject.SetActive(false);
         }
 
         private void ApplyHUDContainerStyling()
         {
-            // 파티 프레임 컨테이너 배경 설정 (AnyRPG 스타일)
             if (partyFrameContainer != null) {
                 var bg = partyFrameContainer.GetComponent<Image>();
-                if (bg != null) {
-                    bg.color = new Color(0.1f, 0.1f, 0.15f, 0.45f); // 은은한 어두운 배경
-                }
+                if (bg != null) bg.color = new Color(0.1f, 0.1f, 0.15f, 0.45f); 
             }
             
-            // 타이머 등 시스템 UI 배경
             if (timerText != null) {
                 var timerBg = timerText.transform.parent.GetComponent<Image>();
-                if (timerBg != null) {
-                    timerBg.color = new Color(0.1f, 0.1f, 0.12f, 0.7f);
-                }
+                if (timerBg != null) timerBg.color = new Color(0.1f, 0.1f, 0.12f, 0.7f);
             }
         }
 
@@ -144,27 +145,49 @@ namespace BossRaid.UI
             CheckInterruptGlow();
         }
 
-        // ===== 초기화 =====
+        // ===== [신규] 네트워크 및 알림 UI 제어 =====
 
-        /// <summary>전투 시작 시 HUD 초기화</summary>
+        /// <summary>서버 통신 중 UI 터치 차단 패널 제어</summary>
+        public void ToggleLoadingPanel(bool isShow)
+        {
+            if (loadingBlockPanel != null)
+            {
+                loadingBlockPanel.SetActive(isShow);
+            }
+            else if (isShow)
+            {
+                Debug.LogWarning("[HUD] 서버 통신 중... (loadingBlockPanel이 인스펙터에 연결되지 않았습니다)");
+            }
+        }
+
+        /// <summary>화면 중앙에 시스템 메시지 표시 후 자동 페이드아웃</summary>
+        public void ShowSystemMessage(string message, float duration = 2.5f)
+        {
+            if (systemMessageText != null)
+            {
+                systemMessageText.text = message;
+                systemMessageText.gameObject.SetActive(true);
+                systemMessageText.canvasRenderer.SetAlpha(1f);
+                systemMessageText.CrossFadeAlpha(0f, duration, false);
+            }
+            else
+            {
+                Debug.LogWarning($"[SystemMessage] {message}");
+            }
+        }
+
+        // ===== 초기화 =====
         public void InitializeHUD(List<CharacterBase> players, BossAI boss, CharacterBase myPlayer)
         {
             localPlayer = myPlayer;
             currentBoss = boss;
-
-            // 보스 프레임 초기화
             if (bossFrame != null) bossFrame.Initialize(boss);
-
-            // 파티 프레임 생성
             InitializePartyFrames(players, myPlayer);
-
-            // 스킬 버튼 초기화
             InitializeSkillButtons();
         }
 
         private void InitializePartyFrames(List<CharacterBase> players, CharacterBase myPlayer)
         {
-            // 기존 프레임 정리
             foreach (var frame in partyFrames)
             {
                 if (frame != null) Destroy(frame.gameObject);
@@ -191,7 +214,6 @@ namespace BossRaid.UI
         {
             if (localPlayer != null)
             {
-                // [Premium] 실제 아이콘이 없을 경우 기본 색상이라도 입혀서 출력
                 if (skill1Button != null) 
                 { 
                     skill1Button.Initialize(0, "Q", true,  OnSkillUsed); 
@@ -221,7 +243,6 @@ namespace BossRaid.UI
         }
 
         // ===== 업데이트 =====
-
         private void UpdateTimer()
         {
             if (timerText == null) return;
@@ -232,7 +253,6 @@ namespace BossRaid.UI
                 int sec = (int)combat.remainingTime % 60;
                 timerText.text = $"{min:D2}:{sec:D2}";
                 
-                // 시간 부족 경고 (30초 이하: 빨간색 깜빡임)
                 if (combat.remainingTime <= 30f)
                     timerText.color = Color.Lerp(Color.red, Color.white, Mathf.PingPong(Time.time * 2f, 1f));
                 else
@@ -242,7 +262,6 @@ namespace BossRaid.UI
 
         private void UpdateKeyboardSkills()
         {
-            // 새로운 입력 시스템 (Input System Package) 지원
             var keyboard = UnityEngine.InputSystem.Keyboard.current;
             if (keyboard == null) return;
 
@@ -252,7 +271,6 @@ namespace BossRaid.UI
             if (keyboard.rKey.wasPressedThisFrame && ultimateButton != null) ultimateButton.GetComponent<Button>().onClick.Invoke();
             if (keyboard.spaceKey.wasPressedThisFrame && dodgeButton != null) dodgeButton.GetComponent<Button>().onClick.Invoke();
 
-            // ESC키 동작: 열려있는 팝업을 닫거나 설정창 열기
             if (keyboard.escapeKey.wasPressedThisFrame)
             {
                 if (inventoryUI != null && inventoryUI.inventoryPanel != null && inventoryUI.inventoryPanel.activeSelf)
@@ -266,19 +284,16 @@ namespace BossRaid.UI
 
         private void CheckInterruptGlow()
         {
-            // 보스 캐스팅 중일 때 차단 스킬 글로우 활성화
             bool bossCasting = bossFrame != null && bossFrame.IsCasting;
             if (skill1Button != null) skill1Button.SetInterruptGlow(bossCasting);
         }
 
         // ===== 이벤트 핸들러 =====
-
         private void OnSkillUsed(int index)
         {
             if (localPlayer != null)
             {
                 localPlayer.TryUseSkill(index);
-                Debug.Log($"[HUD] Skill {index} used.");
             }
         }
 
@@ -287,27 +302,21 @@ namespace BossRaid.UI
             if (localPlayer != null)
             {
                 localPlayer.TryUseSkill(3);
-                Debug.Log("[HUD] Ultimate used!");
             }
         }
 
         private void OnDodgeUsed(int index)
         {
-            // PlayerController의 Dash 호출
             var pc = localPlayer?.GetComponent<Combat.Player.PlayerController>();
             if (pc != null)
             {
                 pc.Dash();
-                Debug.Log("[HUD] Dodge used!");
             }
         }
 
         private void ToggleSettings()
         {
-            if (settingsPanel != null)
-            {
-                settingsPanel.SetActive(!settingsPanel.activeSelf);
-            }
+            if (settingsPanel != null) settingsPanel.SetActive(!settingsPanel.activeSelf);
         }
 
         private void ShowGiveUpPopup()
@@ -346,29 +355,22 @@ namespace BossRaid.UI
         }
 
         // ===== 외부 API =====
-
-        /// <summary>라이프 텍스트 업데이트</summary>
         public void UpdateLife(int currentLives, int maxLives)
         {
-            if (lifeText != null)
-                lifeText.text = $"LIFE: {currentLives}/{maxLives}";
+            if (lifeText != null) lifeText.text = $"LIFE: {currentLives}/{maxLives}";
         }
 
         public void UpdateLocalPlayerHP(float currentHealth, float maxHealth)
         {
-            if (playerHpFill != null)
-                playerHpFill.fillAmount = currentHealth / maxHealth;
-            if (playerHpText != null)
-                playerHpText.text = $"{currentHealth:F0} / {maxHealth:F0}";
+            if (playerHpFill != null) playerHpFill.fillAmount = currentHealth / maxHealth;
+            if (playerHpText != null) playerHpText.text = $"{currentHealth:F0} / {maxHealth:F0}";
         }
 
-        /// <summary>보스 캐스팅 시작 (외부에서 호출)</summary>
         public void NotifyBossCasting(string patternName, float duration)
         {
             if (bossFrame != null) bossFrame.StartCasting(patternName, duration);
         }
 
-        /// <summary>보스 캐스팅 차단 (외부에서 호출)</summary>
         public void NotifyBossInterrupt()
         {
             if (bossFrame != null) bossFrame.InterruptCasting();
