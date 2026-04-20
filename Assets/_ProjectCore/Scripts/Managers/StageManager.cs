@@ -153,7 +153,7 @@ namespace BossRaid.Managers
         }
 
         // ──────────────────────────────────────────────
-        // 4. 보스 클리어 및 롤백 (실패 시) - 수정됨
+        // 4. 보스 클리어 및 롤백 (실패 시) - 성공 팝업 제거 버전
         // ──────────────────────────────────────────────
         public async void OnBossDefeated()
         {
@@ -198,8 +198,9 @@ namespace BossRaid.Managers
             // 6. 성공 시 다음 스테이지 이동
             Debug.Log($"<color=cyan>[StageManager] 동기화 완료! 다음 스테이지 이동.</color>");
 
-            if (InGameHUDController.Instance != null)
-                InGameHUDController.Instance.ShowSystemMessage("<color=#00FF00>보상 획득 완료! 다음 스테이지로 이동합니다.</color>");
+            // 💡 [수정됨] 유저 흐름을 방해하지 않기 위해 성공 시 중앙 팝업 메시지를 띄우지 않습니다.
+            // if (InGameHUDController.Instance != null)
+            //     InGameHUDController.Instance.ShowSystemMessage("<color=#00FF00>보상 획득 완료! 다음 스테이지로 이동합니다.</color>");
 
             InventoryManager.Instance?.DropFromBoss(CurrentStageLevel);
 
