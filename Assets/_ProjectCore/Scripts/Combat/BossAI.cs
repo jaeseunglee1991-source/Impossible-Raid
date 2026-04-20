@@ -25,7 +25,10 @@ namespace BossRaid.Combat.Boss
         public float currentHealth;
         public float autoAttackDamage = 180f;
         public float autoAttackInterval = 2.0f;
-
+        
+        // [신규] 중복 사망 방지 플래그
+        public bool isDead = false;
+        
         // [Optimization] 보스용 헬스 이벤트 (UI 연동 전용)
         public event System.Action<float, float> OnHealthChanged;
 
@@ -953,7 +956,8 @@ namespace BossRaid.Combat.Boss
 
         public void TakeDamage(float amount)
         {
-            if (currentHealth <= 0) return;
+            // ★ 이미 죽은 상태면 모든 추가 타격(DoT 등) 완전 무시
+            if (isDead || currentHealth <= 0) return;
 
             // 궁극기 중 무적 (원작 기준)
             if (isUltimateActive) return;
@@ -971,8 +975,13 @@ namespace BossRaid.Combat.Boss
 
             if (currentHealth <= 0)
             {
+                isDead = true; // ★ 사망 플래그 On
                 currentHealth = 0;
+                
                 if (_animator != null) _animator.SetBool("IsDead", true);
+
+                // 사망 시 보스의 모든 패턴 강제 중지
+                StopAllCoroutines();
 
                 Debug.Log($"<color=green>[{bossName}] has been defeated! 🎆</color>");
 
